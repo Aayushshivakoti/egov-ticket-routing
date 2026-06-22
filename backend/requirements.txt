@@ -16,3 +16,5 @@ pandas
 scikit-learn
 nltk
 joblib
+celery
+redis

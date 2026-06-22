@@ -62,12 +62,29 @@ class Ticket(Base):
     # Constraints
     __table_args__ = (
         CheckConstraint(priority.in_(['low', 'medium', 'high']), name='check_ticket_priority'),
-        CheckConstraint(status.in_(['pending', 'in_progress', 'resolved']), name='check_ticket_status'),
+        CheckConstraint(status.in_(['processing', 'pending', 'in_progress', 'resolved']), name='check_ticket_status'),
     )
 
     # Relationships
     citizen = relationship("User", back_populates="tickets", foreign_keys=[citizen_id])
     assigned_department = relationship("Department", back_populates="tickets", foreign_keys=[assigned_department_id])
+    attachments = relationship("TicketAttachment", back_populates="ticket", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Ticket(id={self.id}, title='{self.title[:20]}...', status='{self.status}')>"
+
+
+class TicketAttachment(Base):
+    __tablename__ = "ticket_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    file_path = Column(String(255), nullable=False)
+    file_type = Column(String(50), nullable=False)  # photo, video, audio
+    is_proof = Column(Boolean, default=False, nullable=False, server_default='0')
+
+    # Relationships
+    ticket = relationship("Ticket", back_populates="attachments")
+
+    def __repr__(self):
+        return f"<TicketAttachment(id={self.id}, ticket_id={self.ticket_id}, file_type='{self.file_type}', is_proof={self.is_proof})>"

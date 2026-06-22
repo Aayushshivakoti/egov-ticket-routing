@@ -20,3 +20,7 @@ frontend/.env.development.local
 postgres_data/
 *.db
 backend/ml/*.joblib
+
+# Runtime/testing artifacts
+backend/uploads/
+mock_emails.log

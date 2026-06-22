@@ -3,25 +3,24 @@ import csv
 import random
 
 def generate():
-    streets = [
+    # English context values
+    streets_en = [
         "New Road", "Kanti Path", "Durbar Marg", "Putalisadak", 
         "Tripureshwor", "Baneshwor", "Chabahil", "Kalimati", 
         "Kupondole", "Jawalakhel", "Thamel", "Maitighar"
     ]
-    
-    landmarks = [
+    landmarks_en = [
         "Central Park", "Civil Mall", "Ward Office", "Public Library", 
         "Golden Temple", "City Hospital", "Metro Station", "Supermarket",
         "Police Station", "Standard School", "Post Office"
     ]
-    
-    times = [
+    times_en = [
         "three days", "yesterday morning", "the past 48 hours", 
         "last week", "almost a month", "two days", "five days"
     ]
     
-    # Templates mapped to Department ID
-    templates = {
+    # English Templates mapped to Department ID
+    templates_en = {
         1: [ # Water Supply
             "Water leak in {street} near {landmark}.",
             "The main pipe broke at {street} and it is flooding the street.",
@@ -108,17 +107,108 @@ def generate():
             "Official stamp is missing on our land registry documents."
         ]
     }
-    
+
+    # Nepali context values
+    streets_ne = [
+        "नयाँ सडक", "कान्तिपथ", "दरबारमार्ग", "पुतलीसडक",
+        "त्रिपुरेश्वर", "बानेश्वर", "चाबहिल", "कालिमाटी",
+        "कुपोण्डोल", "जावलाखेल", "ठमेल", "माइतीघर"
+    ]
+    landmarks_ne = [
+        "पार्क", "मल", "वडा कार्यालय", "पुस्तकालय",
+        "मन्दिर", "अस्पताल", "मेट्रो स्टेशन", "सुपरमार्केट",
+        "प्रहरी कार्यालय", "विद्यालय", "हुलाक कार्यालय"
+    ]
+    times_ne = [
+        "तीन दिनदेखि", "हिजो बिहानदेखि", "गत २४ घण्टादेखि",
+        "गत हप्तादेखि", "झन्डै एक महिनादेखि", "दुई दिनदेखि", "पाँच दिनदेखि"
+    ]
+
+    # Nepali Templates mapped to Department ID
+    templates_ne = {
+        1: [ # Water Supply
+            "{street} को {landmark} नजिकै खानेपानीको पाइप फुटेको छ।",
+            "{street} को मुख्य पाइप फुटेर सडकभरी पानी बगिरहेको छ।",
+            "हाम्रो टोलमा {time} खानेपानी आपूर्ति बन्द भएको छ।",
+            "{street} को धारामा ढलको फोहोर र गन्ध मिसिएको पानी आउँदैछ।",
+            "{street} मा पानीको प्रेसर निकै कम छ, पिउने पानी पाउन मुस्किल भयो।",
+            "{street} को मुख्य ढल मार्ग टालिएर {landmark} नजिकै फोहोर पानी उम्लिरहेको छ।",
+            "यस महिना खानेपानीको बिल अत्याधिक त्रुटिपूर्ण तरिकाले आएको छ।",
+            "खानेपानीको मुख्य भल्भ बिग्रेर लगातार पानी नष्ट भइरहेको छ।",
+            "{street} को नालामा अवरोध सिर्जना भई ठूलो दुर्गन्ध फैलिरहेको छ।",
+            "{landmark} नजिकै ढलको पानी खानेपानीको पाइपमा मिसिएको शंका छ।"
+        ],
+        2: [ # Roads & Infrastructure
+            "{street} मा ठूलो खाल्डो परेकोले गर्दा सवारी जाम भइरहेको छ।",
+            "{time} नयाँ जडान गरिएका सडक बत्तीहरू बलेका छैनन्।",
+            "{street} को फुटपाथ भत्किएको कारण पैदलयात्रुलाई हिँड्न निकै सास्ती छ।",
+            "{street} र मुख्य सडक जोड्ने चोकको ट्राफिक लाइट बिग्रेको छ।",
+            "सडक मर्मतको कार्य अलपत्र छाडेर हिँडेकाले आवतजावतमा बाधा पुगेको छ।",
+            "{landmark} नजिकैको पुलमा ठूले-ठूला चिराहरू परेका छन्।",
+            "{landmark} वरपरको फुटपाथका टायलहरू गायब भएका छन्।",
+            "{landmark} विद्यालय नजिकै जेब्रा क्रसिङ नहुँदा बालबालिकालाई जोखिम छ।",
+            "{street} मा म्यानहोलको ढक्कन हराएकोले गर्दा दुर्घटना हुन सक्छ।",
+            "{street} को सडक पिच भत्किएर मसिना गिटीहरू उडेर मोटरसाइकल चिप्लिरहेका छन्।"
+        ],
+        3: [ # Electricity Authority
+            "{street} मा विगत {time} पटक-पटक बत्ती जाने-आउने गरिरहेको छ।",
+            "विद्युत भोल्टेज अत्याधिक घटबढ हुँदा घरका उपकरणहरू बिग्रने डर भयो।",
+            "{street} को बिजुलीको पोलबाट नाङ्गो तार भुइँमा खसेर जोखिम सिर्जना गरेको छ।",
+            "{landmark} नजिकैको ट्रान्सफर्मर पड्किएर ठूलो आवाज आयो र बत्ती निभ्यो।",
+            "हाम्रो घरको बिजुलीको मिटर असामान्य रूपमा छिटो कुदिरहेको छ।",
+            "बिजुलीको महसुल बिल र मिटरको अंक मेल खाएको छैन।",
+            "{street} का सडक बत्तीहरूमा विद्युत आपूर्ति नहुँदा अँध्यारो छ।",
+            "{street} को बिजुलीको पोल ढल्न लागेर जोखिमपूर्ण अवस्थामा छ।",
+            "{landmark} नजिकैको मुख्य जङ्क्सन बक्समा सर्ट सर्किट भयो।",
+            "{landmark} नजिकै ओभरहेड तारहरूबाट बिजुलीको झिल्काहरू निस्किरहेका छन्।"
+        ],
+        4: [ # Waste Management
+            "{street} मा रहेको सार्वजनिक फोहोर फाल्ने ठाउँ फोहोरले भरिएर गन्हाएको छ।",
+            "{time} फोहोर संकलन गर्ने गाडी हाम्रो टोलमा आएको छैन।",
+            "{landmark} नजिकै गैरकानूनी रूपमा फोहोर फालिएकोले दुर्गन्ध छ।",
+            "{landmark} को सार्वजनिक पार्कमा जताततै प्लास्टिक र बोतलहरू फालिएका छन्।",
+            "{street} को सडक छेउमा जनावरको मृत शरीर कुहिएर गन्हाइरहेको छ।",
+            "बजार क्षेत्रमा फोहोर नउठाइएकोले तरकारी कुहिएर दुर्गन्ध फैलिएको छ।",
+            "हाम्रो टोल {landmark} नजिकै फोहोर वर्गीकरण गर्ने भाँडो छैन।",
+            "फोहोर संकलकहरूले अतिरिक्त रकम मागिरहेका छन्।",
+            "प्लास्टिक जन्य फोहोरले नालाहरू थुनिएका छन्।",
+            "{landmark} नजिकै अस्पतालको फोहोर खुल्ला रूपमा फालिएको छ।"
+        ],
+        5: [ # General Administration
+            "व्यापार नवीकरण प्रक्रिया र दस्तुरको विवरण चाहियो।",
+            "जन्म दर्ता प्रमाणपत्रमा नाम सच्याउने निवेदन {time} अलपत्र छ।",
+            "सम्पत्ति कर अनलाइन मार्फत भुक्तानी गर्दा प्रणालीले काम गरेन।",
+            "वडा कार्यालयका कर्मचारीहरूले सेवाग्राहीसँग अमर्यादित व्यवहार गरे।",
+            "{street} मा नयाँ पार्किङ अनुमतिको लागि कसरी निवेदन दिने होला?",
+            "वडा कार्यालयमा नागरिक बडापत्र स्पष्ट देखिने गरी राखिएको छैन।",
+            "नागरिकताको प्रमाणपत्र प्रतिलिपि लिन के-के कागजात चाहिन्छ?",
+            "सम्पत्ति कर बुझाउने प्रक्रिया बुझाइदिनु हुन अनुरोध छ।",
+            "कार्यालय समयमा सम्बन्धित फाँटका कर्मचारी सिटमा भेटिँदैनन्।",
+            "सूचनाको हक अन्तर्गत सूचना माग गर्न दर्ता शाखा कहाँ छ?"
+        ]
+    }
+
     dataset = []
     
-    # Generate 50 examples per department (50 * 5 = 250 records)
-    for dept_id, list_templates in templates.items():
+    # 1. Generate 50 English examples per department (250 total)
+    for dept_id, list_templates in templates_en.items():
         for _ in range(50):
             template = random.choice(list_templates)
             text = template.format(
-                street=random.choice(streets),
-                landmark=random.choice(landmarks),
-                time=random.choice(times)
+                street=random.choice(streets_en),
+                landmark=random.choice(landmarks_en),
+                time=random.choice(times_en)
+            )
+            dataset.append((text, dept_id))
+
+    # 2. Generate 10 Nepali examples per department (50 total)
+    for dept_id, list_templates in templates_ne.items():
+        for _ in range(10):
+            template = random.choice(list_templates)
+            text = template.format(
+                street=random.choice(streets_ne),
+                landmark=random.choice(landmarks_ne),
+                time=random.choice(times_ne)
             )
             dataset.append((text, dept_id))
             
@@ -132,7 +222,7 @@ def generate():
         writer.writerow(['text', 'department_id'])
         writer.writerows(dataset)
         
-    print(f"Generated {len(dataset)} examples in dataset.csv successfully!")
+    print(f"Generated {len(dataset)} examples (250 English + 50 Nepali) in dataset.csv successfully!")
 
 if __name__ == "__main__":
     generate()

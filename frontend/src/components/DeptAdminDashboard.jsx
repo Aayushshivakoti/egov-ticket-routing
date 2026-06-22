@@ -8,28 +8,49 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
   const [statusVal, setStatusVal] = useState('pending');
   const [remarksVal, setRemarksVal] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [proofFiles, setProofFiles] = useState([]);
 
   const handleOpenModal = (ticket) => {
     setSelectedTicket(ticket);
     setStatusVal(ticket.status);
     setRemarksVal(ticket.remarks || '');
+    setActiveMediaIndex(0);
+    setProofFiles([]);
     setModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setSelectedTicket(null);
+    setProofFiles([]);
     setModalOpen(false);
   };
 
   const handleSaveStatus = async (e) => {
     e.preventDefault();
     if (!selectedTicket) return;
+
+    if (statusVal === 'resolved' && proofFiles.length === 0) {
+      alert("Resolution proof is mandatory when status is set to Resolved. Please upload a media file.");
+      return;
+    }
+
     setUpdating(true);
 
     try {
-      await api.put(`/tickets/${selectedTicket.id}/status`, {
-        status: statusVal,
-        remarks: remarksVal
+      const formData = new FormData();
+      formData.append('status', statusVal);
+      formData.append('remarks', remarksVal);
+      if (statusVal === 'resolved') {
+        proofFiles.forEach((file) => {
+          formData.append('files', file);
+        });
+      }
+
+      await api.put(`/tickets/${selectedTicket.id}/status`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       });
       
       handleCloseModal();
@@ -81,6 +102,18 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
                     <td className="py-4 px-4">
                       <p className="font-bold text-slate-200">{ticket.title}</p>
                       <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{ticket.description}</p>
+                      {ticket.reasoning_keywords && ticket.reasoning_keywords.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 items-center">
+                          <span className="text-[9px] text-purple-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                            <Cpu className="w-3 h-3 text-purple-400" /> Routing Keywords:
+                          </span>
+                          {ticket.reasoning_keywords.map((k) => (
+                            <span key={k} className="px-1.5 py-0.5 bg-purple-950/40 text-purple-400 border border-purple-900/30 rounded text-[9px] font-mono font-bold">
+                              {k}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="py-4 px-4">
                       {getPriorityBadge(ticket.priority)}
@@ -154,6 +187,99 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
                 </p>
               </div>
 
+              {selectedTicket.reasoning_keywords && selectedTicket.reasoning_keywords.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+                    <Cpu className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                    Explainable AI (XAI) Routing Diagnosis
+                  </h4>
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {selectedTicket.reasoning_keywords.map((k) => (
+                      <span key={k} className="px-2.5 py-1 bg-purple-950/40 text-purple-400 border border-purple-800/40 rounded-xl text-xs font-mono font-bold tracking-wide">
+                        {k}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedTicket.attachments && selectedTicket.attachments.length > 0 && (
+                <div className="border-t border-slate-800 pt-4 mt-4">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+                    Evidence Attachments ({selectedTicket.attachments.length})
+                  </h4>
+                  <div className="relative bg-slate-950/60 border border-slate-850 rounded-xl overflow-hidden p-4 flex flex-col items-center justify-center min-h-[220px]">
+                    {(() => {
+                      const att = selectedTicket.attachments[activeMediaIndex];
+                      const fullUrl = `http://localhost:8000${att.file_path}`;
+                      return (
+                        <div className="w-full flex flex-col items-center relative">
+                          {att.is_proof && (
+                            <span className="absolute top-2 right-2 px-2.5 py-1 bg-emerald-950/80 text-emerald-450 border border-emerald-800/40 text-[9px] font-extrabold uppercase rounded-lg z-10 select-none">
+                              Resolution Proof
+                            </span>
+                          )}
+                          {att.file_type === 'photo' ? (
+                            <img 
+                              src={fullUrl} 
+                              alt="Attachment" 
+                              className="max-h-[260px] object-contain rounded-lg shadow-md border border-slate-850"
+                            />
+                          ) : att.file_type === 'video' ? (
+                            <video 
+                              src={fullUrl} 
+                              controls 
+                              className="max-h-[260px] w-full rounded-lg shadow-md border border-slate-850"
+                            />
+                          ) : att.file_type === 'audio' ? (
+                            <div className="flex flex-col items-center justify-center p-6 w-full gap-3 bg-slate-900/40 rounded-lg border border-slate-850">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Audio Evidence clip</span>
+                              <audio 
+                                src={fullUrl} 
+                                controls 
+                                className="w-full max-w-md"
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
+
+                    {selectedTicket.attachments.length > 1 && (
+                      <>
+                        <button 
+                          type="button"
+                          onClick={() => setActiveMediaIndex((prev) => (prev === 0 ? selectedTicket.attachments.length - 1 : prev - 1))}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-slate-950/80 hover:bg-slate-850 border border-slate-850 rounded-full text-slate-300 hover:text-slate-100 transition-all cursor-pointer font-bold"
+                        >
+                          &larr;
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setActiveMediaIndex((prev) => (prev === selectedTicket.attachments.length - 1 ? 0 : prev + 1))}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-slate-950/80 hover:bg-slate-850 border border-slate-850 rounded-full text-slate-300 hover:text-slate-100 transition-all cursor-pointer font-bold"
+                        >
+                          &rarr;
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {selectedTicket.attachments.length > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-3">
+                      {selectedTicket.attachments.map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setActiveMediaIndex(idx)}
+                          className={`w-2 h-2 rounded-full transition-all ${idx === activeMediaIndex ? 'bg-blue-500 scale-125' : 'bg-slate-700 hover:bg-slate-500'}`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Meta information row */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-950/20 p-4 border border-slate-850 rounded-xl">
                 <div>
@@ -211,6 +337,47 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
                     />
                   </div>
                 </div>
+
+                {statusVal === 'resolved' && (
+                  <div className="pt-2">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                      Resolution Media Proof (Mandatory)
+                    </label>
+                    <div className="p-4 bg-slate-950 border border-dashed border-slate-800 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-blue-500/50 transition-all relative">
+                      <input
+                        id="proof-upload-input"
+                        type="file"
+                        multiple
+                        onChange={(e) => {
+                          if (e.target.files) {
+                            setProofFiles(Array.from(e.target.files));
+                          }
+                        }}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        required
+                        accept="image/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp4,audio/m4a"
+                      />
+                      <FileText className="w-8 h-8 text-blue-500 animate-pulse" />
+                      <p className="text-xs text-slate-300 font-bold text-center">
+                        Drag & drop or click to upload proof
+                      </p>
+                      <p className="text-[10px] text-slate-500 text-center font-medium">
+                        Supported: Images, MP4/MOV Videos, MP3/WAV/M4A Audios
+                      </p>
+                    </div>
+                    {proofFiles.length > 0 && (
+                      <div className="mt-3 bg-slate-950/40 border border-slate-850 p-3 rounded-xl space-y-1.5">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Selected Proof Files</span>
+                        {proofFiles.map((file, index) => (
+                          <div key={index} className="flex items-center justify-between text-xs text-slate-350 bg-slate-900 border border-slate-800/60 px-3 py-1.5 rounded-lg">
+                            <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                            <span className="text-[9px] text-slate-500 font-mono">{(file.size / 1024).toFixed(0)} KB</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-3 pt-2">
                   <button

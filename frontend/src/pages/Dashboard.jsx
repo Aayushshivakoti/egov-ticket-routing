@@ -21,10 +21,43 @@ const Dashboard = () => {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    
+    // Connect to WebSocket updates server
+    const wsUrl = `ws://${window.location.hostname}:8000/api/ws`;
+    console.log("Connecting to WebSocket updates channel:", wsUrl);
+    const socket = new WebSocket(wsUrl);
+    
+    socket.onopen = () => {
+      console.log("WebSocket connection established.");
+    };
+    
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("WebSocket update message received:", data);
+        if (data.event === "ticket_updated") {
+          console.log(`Ticket ID ${data.ticket_id} updated. Initiating background refresh...`);
+          fetchDataSilent();
+        }
+      } catch (err) {
+        console.warn("WebSocket raw message received:", event.data);
+      }
+    };
+    
+    socket.onclose = () => {
+      console.log("WebSocket connection closed.");
+    };
+    
+    return () => {
+      socket.close();
+    };
+  }, [user]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Run API fetches in parallel using Axios
       const [ticketsResponse, deptsResponse] = await Promise.all([
         api.get('/tickets'),
         api.get('/departments')
@@ -37,6 +70,21 @@ const Dashboard = () => {
       console.error("Failed to load dashboard data:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDataSilent = async () => {
+    try {
+      const [ticketsResponse, deptsResponse] = await Promise.all([
+        api.get('/tickets'),
+        api.get('/departments')
+      ]);
+
+      setTickets(ticketsResponse.data);
+      setDepartments(deptsResponse.data);
+      calculateStats(ticketsResponse.data);
+    } catch (err) {
+      console.error("Failed to silently load updates:", err);
     }
   };
 
@@ -65,6 +113,7 @@ const Dashboard = () => {
 
   const getStatusBadge = (s) => {
     const styles = {
+      processing: 'bg-purple-950/40 text-purple-400 border border-purple-800/50',
       pending: 'bg-yellow-950/40 text-yellow-400 border border-yellow-800/50',
       in_progress: 'bg-blue-950/40 text-blue-400 border border-blue-800/50',
       resolved: 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/50'

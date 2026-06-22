@@ -59,12 +59,23 @@ class TicketUpdate(BaseModel):
     assigned_department_id: Optional[int] = None
     ai_confidence: Optional[float] = None
     priority: Optional[str] = Field(None, pattern="^(low|medium|high)$")
-    status: Optional[str] = Field(None, pattern="^(pending|in_progress|resolved)$")
+    status: Optional[str] = Field(None, pattern="^(processing|pending|in_progress|resolved)$")
     remarks: Optional[str] = None
 
 class TicketStatusUpdate(BaseModel):
-    status: str = Field(..., pattern="^(pending|in_progress|resolved)$")
+    status: str = Field(..., pattern="^(processing|pending|in_progress|resolved)$")
     remarks: Optional[str] = None
+
+# --- TicketAttachment Schemas ---
+class TicketAttachmentResponse(BaseModel):
+    id: int
+    ticket_id: int
+    file_path: str
+    file_type: str
+    is_proof: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class TicketResponse(TicketBase, BaseConfigModel):
     id: int
@@ -76,6 +87,9 @@ class TicketResponse(TicketBase, BaseConfigModel):
     needs_verification: bool
     created_at: datetime
     updated_at: datetime
+    reasoning_keywords: Optional[List[str]] = None
+    classification_latency: Optional[float] = None
+    attachments: List[TicketAttachmentResponse] = []
     
     # Extra relationship information if needed
     citizen: Optional[UserResponse] = None

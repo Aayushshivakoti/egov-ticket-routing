@@ -5,16 +5,24 @@ import joblib
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import FeatureUnion
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
+
+# Nepali stop words list
+NEPALI_STOPWORDS = {
+    'र', 'त', 'नेपाल', 'को', 'का', 'की', 'ले', 'मा', 'नि', 'पनि', 'छ', 'छन्', 'थिए', 'भयो', 'गरे', 'गर्नु', 'हुने', 'हो', 'हुन्', 'बाट', 'लाई', 'देखि', 'म', 'हामी', 'तपाई', 'ऊ', 'यो', 'त्यो', 'यस', 'त्यस', 'भने', 'रहेको', 'गरेको', 'भनेर', 'रुपमा', 'पर्ने', 'गर्न', 'पर्छ', 'यस्तो', 'त्यस्तो', 'पनि', 'हुन'
+}
 
 # Pure Python fallback preprocessing function
 def fallback_preprocess_text(text: str) -> str:
     text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)
+    # Strip standard punctuation and Devanagari punctuation (dandas)
+    punc_to_strip = string.punctuation + '।॥'
+    text = text.translate(str.maketrans('', '', punc_to_strip))
     tokens = text.split()
     
-    STOP_WORDS = {
+    STOP_WORDS_EN = {
         'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've", "you'll", "you'd",
         'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', "she's", 'her', 'hers',
         'herself', 'it', "it's", 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which',
@@ -40,7 +48,7 @@ def fallback_preprocess_text(text: str) -> str:
             if word.endswith('ed'): return word[:-2]
         return word
         
-    cleaned = [basic_lemma(word) for word in tokens if word not in STOP_WORDS]
+    cleaned = [basic_lemma(word) for word in tokens if (word not in STOP_WORDS_EN and word not in NEPALI_STOPWORDS)]
     return " ".join(cleaned)
 
 # Attempt NLTK preprocessing setup
@@ -50,22 +58,33 @@ try:
     from nltk.tokenize import word_tokenize
     from nltk.stem import WordNetLemmatizer
     
-    # Download datasets silently, including the punkt_tab required in nltk >= 3.9
+    # Download datasets silently
     nltk.download('punkt', quiet=True)
     nltk.download('punkt_tab', quiet=True)
     nltk.download('stopwords', quiet=True)
     nltk.download('wordnet', quiet=True)
     nltk.download('omw-1.4', quiet=True)
     
-    STOP_WORDS = set(stopwords.words('english'))
+    STOP_WORDS_EN = set(stopwords.words('english'))
     lemmatizer = WordNetLemmatizer()
     
     def preprocess_text(text: str) -> str:
         try:
             text = text.lower()
-            text = text.translate(str.maketrans('', '', string.punctuation))
+            # Strip standard punctuation and Devanagari punctuation (dandas)
+            punc_to_strip = string.punctuation + '।॥'
+            text = text.translate(str.maketrans('', '', punc_to_strip))
             tokens = word_tokenize(text)
-            cleaned = [lemmatizer.lemmatize(word) for word in tokens if word not in STOP_WORDS]
+            
+            cleaned = []
+            for word in tokens:
+                if word in STOP_WORDS_EN or word in NEPALI_STOPWORDS:
+                    continue
+                # Lemmatize English terms only
+                if re.match(r'^[a-z]+$', word):
+                    cleaned.append(lemmatizer.lemmatize(word))
+                else:
+                    cleaned.append(word)
             return " ".join(cleaned)
         except Exception:
             return fallback_preprocess_text(text)
@@ -92,8 +111,16 @@ def main():
         X, y, test_size=0.2, random_state=42, stratify=y
     )
     
-    print("Transforming texts using TF-IDF (ngrams=1-2)...")
-    vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=2)
+    print("Setting up hybrid character/word-level TF-IDF vectorizer...")
+    word_vectorizer = TfidfVectorizer(analyzer='word', ngram_range=(1, 2), min_df=2)
+    char_vectorizer = TfidfVectorizer(analyzer='char', ngram_range=(3, 5), min_df=2)
+    
+    vectorizer = FeatureUnion([
+        ('word_tfidf', word_vectorizer),
+        ('char_tfidf', char_vectorizer)
+    ])
+    
+    print("Fitting and transforming text features...")
     X_train_tfidf = vectorizer.fit_transform(X_train)
     X_test_tfidf = vectorizer.transform(X_test)
     
