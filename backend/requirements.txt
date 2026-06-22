@@ -12,3 +12,7 @@ python-multipart
 cors
 psycopg-binary
 email-validator
+pandas
+scikit-learn
+nltk
+joblib

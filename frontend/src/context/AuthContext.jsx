@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import api from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -6,7 +7,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [loading, setLoading] = useState(true);
-  const API_URL = 'http://localhost:8000/api';
 
   useEffect(() => {
     if (token) {
@@ -18,18 +18,8 @@ export const AuthProvider = ({ children }) => {
 
   const fetchUserProfile = async () => {
     try {
-      const response = await fetch(`${API_URL}/auth/me`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-      } else {
-        // Token is expired or invalid
-        logout();
-      }
+      const response = await api.get('/auth/me');
+      setUser(response.data);
     } catch (error) {
       console.error('Error fetching user profile:', error);
       logout();
@@ -45,26 +35,20 @@ export const AuthProvider = ({ children }) => {
       formData.append('username', email);
       formData.append('password', password);
 
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
+      const response = await api.post('/auth/login', formData, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: formData
+        }
       });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || 'Login failed');
-      }
-
-      const data = await response.json();
+      const data = response.data;
       localStorage.setItem('token', data.access_token);
       setToken(data.access_token);
       return true;
     } catch (error) {
       setLoading(false);
-      throw error;
+      const detail = error.response?.data?.detail || 'Login failed';
+      throw new Error(detail);
     }
   };
 
@@ -76,7 +60,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, fetchUserProfile, API_URL }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, fetchUserProfile, API_URL: 'http://localhost:8000/api' }}>
       {children}
     </AuthContext.Provider>
   );

@@ -18,3 +18,5 @@ frontend/.env.development.local
 
 # Local database volumes
 postgres_data/
+*.db
+backend/ml/*.joblib
