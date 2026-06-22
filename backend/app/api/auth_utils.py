@@ -1,7 +1,6 @@
 import datetime
 from typing import Optional, List
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -10,14 +9,18 @@ from app.db import get_db
 from app.models import User
 from app.schemas import TokenData
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import hashlib
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    salt = b"egov_secure_salt_2026"
+    pwd_bytes = password.encode('utf-8')
+    key = hashlib.pbkdf2_hmac('sha256', pwd_bytes, salt, 100000)
+    return key.hex()
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return get_password_hash(plain_password) == hashed_password
 
 def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None) -> str:
     to_encode = data.copy()

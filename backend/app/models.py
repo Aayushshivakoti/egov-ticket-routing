@@ -52,6 +52,7 @@ class Ticket(Base):
     ai_confidence = Column(Float, nullable=True)
     priority = Column(String(20), nullable=False, default="medium")
     status = Column(String(20), nullable=False, default="pending")
+    remarks = Column(Text, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False)

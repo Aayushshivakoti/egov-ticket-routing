@@ -1,18 +1,13 @@
 import os
 import sys
-from passlib.context import CryptContext
-from sqlalchemy.orm import Session
 
 # Add the project root to path to ensure app imports work
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from sqlalchemy.orm import Session
 from app.db import Base, engine, SessionLocal
 from app.models import Department, User, Ticket
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+from app.api.auth_utils import get_password_hash
 
 def seed_db():
     print("Initializing database connection...")
