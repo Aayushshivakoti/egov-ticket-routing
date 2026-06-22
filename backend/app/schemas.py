@@ -73,6 +73,7 @@ class TicketResponse(TicketBase, BaseConfigModel):
     ai_confidence: Optional[float] = None
     status: str
     remarks: Optional[str] = None
+    needs_verification: bool
     created_at: datetime
     updated_at: datetime
     

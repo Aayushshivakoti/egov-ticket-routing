@@ -36,7 +36,8 @@ def setup_database():
     db = TestingSessionLocal()
     water_dept = Department(id=1, name="Water Supply", description="Water distribution systems")
     roads_dept = Department(id=2, name="Roads & Infrastructure", description="Municipal road systems")
-    db.add_all([water_dept, roads_dept])
+    general_dept = Department(id=5, name="General Administration", description="General administrative inquiries")
+    db.add_all([water_dept, roads_dept, general_dept])
     db.commit()
     db.close()
     
@@ -136,6 +137,7 @@ def test_create_ticket_authenticated_citizen():
     assert data["assigned_department_id"] == 1
     assert data["status"] == "pending"
     assert data["remarks"] is None
+    assert data["needs_verification"] is False
     ticket_id_val = data["id"]
 
 def test_create_ticket_unauthenticated():
@@ -147,6 +149,23 @@ def test_create_ticket_unauthenticated():
         }
     )
     assert response.status_code == 401
+
+def test_create_ticket_low_confidence_flag():
+    # Submit a vague description that won't exceed the 65% confidence routing threshold
+    response = client.post(
+        "/api/tickets/create",
+        json={
+            "title": "Vague complaint",
+            "description": "Just an obscure minor thing at some random location.",
+            "priority": "low"
+        },
+        headers={"Authorization": f"Bearer {citizen_token}"}
+    )
+    assert response.status_code == 201
+    data = response.json()
+    # Must route to General Administration (ID=5) and needs_verification is True
+    assert data["assigned_department_id"] == 5
+    assert data["needs_verification"] is True
 
 def test_get_department_tickets_admin_success():
     response = client.get(

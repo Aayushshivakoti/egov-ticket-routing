@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, CheckConstraint
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, CheckConstraint, Boolean
 from sqlalchemy.orm import relationship
 from app.db import Base
 
@@ -53,6 +53,7 @@ class Ticket(Base):
     priority = Column(String(20), nullable=False, default="medium")
     status = Column(String(20), nullable=False, default="pending")
     remarks = Column(Text, nullable=True)
+    needs_verification = Column(Boolean, default=False, nullable=False)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False)
