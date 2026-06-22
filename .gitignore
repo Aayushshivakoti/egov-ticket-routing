@@ -1,0 +1,20 @@
+# Virtual environments
+backend/venv/
+backend/.env
+backend/__pycache__/
+backend/**/*.pyc
+
+# Node dependencies and builds
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+
+# IDE configurations
+.vscode/
+.idea/
+.DS_Store
+
+# Local database volumes
+postgres_data/
