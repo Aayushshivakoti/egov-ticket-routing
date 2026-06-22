@@ -30,8 +30,8 @@ const Login = () => {
 
   const presets = [
     { label: 'Super Admin', email: 'admin@egov.gov.np', icon: ShieldCheck, color: 'border-rose-500/30 text-rose-400 bg-rose-950/20' },
+    { label: 'Electricity Admin', email: 'electricity_admin@egov.gov.np', icon: UserCheck, color: 'border-yellow-500/30 text-yellow-400 bg-yellow-950/20' },
     { label: 'Water Dept Admin', email: 'water_admin@egov.gov.np', icon: UserCheck, color: 'border-cyan-500/30 text-cyan-400 bg-cyan-950/20' },
-    { label: 'Roads Dept Admin', email: 'roads_admin@egov.gov.np', icon: UserCheck, color: 'border-amber-500/30 text-amber-400 bg-amber-950/20' },
     { label: 'Citizen (Hari)', email: 'hari@gmail.com', icon: Users, color: 'border-emerald-500/30 text-emerald-400 bg-emerald-950/20' },
   ];
 
