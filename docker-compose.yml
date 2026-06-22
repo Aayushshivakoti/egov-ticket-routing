@@ -32,12 +32,43 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/egov_helpdesk
+      - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=supersecretjwtkeychangeinproduction
       - ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
+
+  redis:
+    image: redis:7-alpine
+    container_name: egov_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: egov_celery_worker
+    restart: always
+    command: celery -A app.celery_app.celery_app worker --loglevel=info -P solo
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/egov_helpdesk
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=supersecretjwtkeychangeinproduction
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   frontend:
     build:

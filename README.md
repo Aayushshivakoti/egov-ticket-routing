@@ -83,18 +83,24 @@ erDiagram
     USERS ||--o{ TICKETS : "submits"
 ```
 
----
-
 ## Getting Started
 
-### Method A: Docker Compose (Recommended)
+### Quick Start: Unified Launcher (Windows)
+Double-click `run.bat` in the root folder, or execute it from command prompt:
+```cmd
+run.bat
+```
+This utility lets you quickly choose to start the entire ecosystem (including Redis and Celery worker) either inside Docker containers or natively in separate host command windows.
 
-Spins up PostgreSQL, FastAPI Backend, and React Frontend in a hot-reloading environment.
+---
+
+### Method A: Docker Compose (Recommended)
+Spins up PostgreSQL, Redis, FastAPI Backend, Celery Worker, and React Frontend in a hot-reloading environment.
 
 1. Ensure Docker is running.
 2. In the root directory, run:
    ```bash
-   docker-compose up --build
+   docker compose up --build
    ```
 3. Once running:
    - Backend API documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
