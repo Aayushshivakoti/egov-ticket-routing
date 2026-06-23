@@ -65,46 +65,6 @@ Built with **Python (FastAPI, Celery)** on the backend and **React.js (Vite, Tai
 
 ---
 
-## 🛠️ Relational Database Schema Design
-
-```mermaid
-erDiagram
-    DEPARTMENTS {
-        int id PK
-        string name UNIQUE
-        text description
-    }
-    USERS {
-        int id PK
-        string name
-        string email UNIQUE
-        string role "citizen | dept_admin | super_admin"
-        string dept_role "Support Rep | Field Operator | Department Head"
-        int department_id FK
-    }
-    TICKETS {
-        int id PK
-        int citizen_id FK
-        int assigned_department_id FK
-        string status "pending | in_progress | resolved | Under Re-evaluation"
-        float ai_confidence
-        float latitude
-        float longitude
-        boolean citizen_satisfied
-    }
-    SYSTEM_AUDIT_LOGS {
-        int id PK
-        int user_id FK
-        string action_performed
-        string payload
-        string previous_row_hash
-        string current_row_hash
-    }
-
-    DEPARTMENTS ||--o{ USERS : "employs"
-    DEPARTMENTS ||--o{ TICKETS : "assigned_to"
-    USERS ||--o{ TICKETS : "submits"
-    USERS ||--o{ SYSTEM_AUDIT_LOGS : "triggers"
 ```
 
 ---
