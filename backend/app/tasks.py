@@ -74,3 +74,65 @@ def classify_ticket_task(ticket_id: int):
         raise e
     finally:
         db.close()
+
+
+@celery_app.task(name="app.tasks.check_sla_violations")
+def check_sla_violations():
+    """
+    Background worker: checks for resolved tickets where proof was requested
+    more than 24 hours ago but no proof has been uploaded.
+    Marks them as SLA violated and notifies super admins.
+    """
+    import datetime
+    from app.models import Ticket, TicketAttachment, User
+    from app.email_utils import send_mock_email
+    
+    print("Running SLA violation check...")
+    db = SessionLocal()
+    try:
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
+        
+        # Find tickets where proof was requested > 24h ago but no proof uploaded
+        candidates = db.query(Ticket).filter(
+            Ticket.proof_requested_at.isnot(None),
+            Ticket.proof_requested_at <= cutoff,
+            Ticket.sla_violated == False,
+            Ticket.status == "resolved"
+        ).all()
+        
+        violated_count = 0
+        for ticket in candidates:
+            # Check if proof was uploaded since request
+            proof_exists = db.query(TicketAttachment).filter(
+                TicketAttachment.ticket_id == ticket.id,
+                TicketAttachment.is_proof == True
+            ).first()
+            
+            if not proof_exists:
+                ticket.sla_violated = True
+                violated_count += 1
+                print(f"SLA VIOLATION: Ticket #{ticket.id} - '{ticket.title}' - proof not provided within 24 hours")
+        
+        if violated_count > 0:
+            db.commit()
+            
+            # Alert all super admins
+            super_admins = db.query(User).filter(User.role == "super_admin").all()
+            for admin in super_admins:
+                send_mock_email(
+                    admin.email,
+                    f"SLA Alert: {violated_count} New Violation(s) Detected",
+                    f"Hello {admin.name},\n\n{violated_count} ticket(s) have exceeded the 24-hour SLA window for providing resolution proof.\n\nPlease review the SLA Violations panel in your dashboard and take appropriate action.\n\nE-Governance Helpdesk Administration"
+                )
+            
+            print(f"SLA check complete: {violated_count} new violations detected and escalated.")
+        else:
+            print("SLA check complete: No new violations found.")
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error during SLA violation check: {e}")
+        raise e
+    finally:
+        db.close()
+

@@ -1,0 +1,3 @@
+open cmd
+
+the type run.bat

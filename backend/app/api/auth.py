@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -64,13 +65,27 @@ def provision(
             detail="Department ID is required for departmental administrators"
         )
         
+    if user_in.dept_role == "Department Head":
+        existing_head = db.query(User).filter(
+            User.department_id == user_in.department_id,
+            User.dept_role == "Department Head"
+        ).first()
+        if existing_head:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A Department Head is already assigned to this department."
+            )
+        
     hashed_pwd = get_password_hash(user_in.password)
     new_user = User(
         name=user_in.name,
         email=user_in.email,
         password_hash=hashed_pwd,
         role=user_in.role,
-        department_id=user_in.department_id
+        department_id=user_in.department_id,
+        employee_id_or_passport=user_in.employee_id_or_passport,
+        status=user_in.status or "active",
+        dept_role=user_in.dept_role
     )
     db.add(new_user)
     db.commit()
@@ -85,6 +100,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if user.status == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been suspended. Please contact the administrator."
         )
     
     # Create token containing user email and role

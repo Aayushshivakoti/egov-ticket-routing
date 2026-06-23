@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
+import AllGrievances from './pages/AllGrievances';
 import api from './services/api';
 import { 
   Cpu, Loader, Shield, FileSpreadsheet, Sparkles, X, Mail, Lock, 
   AlertCircle, CheckCircle2, User, ArrowRight, ArrowLeft, Eye, 
-  Building2, Users, FileText
+  Building2, Users, FileText, ExternalLink, Clock, Send
 } from 'lucide-react';
 
 const AppContent = () => {
@@ -22,6 +23,8 @@ const AppContent = () => {
   const [departments, setDepartments] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState('home'); // 'home' or 'all-grievances'
+  const [requestingProof, setRequestingProof] = useState(null);
   
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
@@ -48,7 +51,7 @@ const AppContent = () => {
     try {
       const [statsRes, feedRes, deptsRes] = await Promise.all([
         api.get('/tickets/public/stats'),
-        api.get('/tickets/public/feed'),
+        api.get('/tickets/public/feed?limit=8'),
         api.get('/departments')
       ]);
       setStats(statsRes.data);
@@ -142,6 +145,20 @@ const AppContent = () => {
     }
   };
 
+  const handleRequestProof = async (ticketId) => {
+    setRequestingProof(ticketId);
+    try {
+      await api.post(`/tickets/${ticketId}/request-proof`);
+      alert('Proof request sent successfully! The department has been notified.');
+      fetchPublicData();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || 'Failed to request proof.');
+    } finally {
+      setRequestingProof(null);
+    }
+  };
+
   const getDepartmentName = (deptId) => {
     const dept = departments.find(d => d.id === deptId);
     return dept ? dept.name : 'AI Routing...';
@@ -152,7 +169,8 @@ const AppContent = () => {
       processing: 'bg-purple-950/40 text-purple-400 border border-purple-800/50',
       pending: 'bg-yellow-950/40 text-yellow-400 border border-yellow-800/50',
       in_progress: 'bg-blue-950/40 text-blue-400 border border-blue-800/50',
-      resolved: 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/50'
+      resolved: 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/50',
+      sla_violated: 'bg-rose-950/40 text-rose-400 border border-rose-800/50'
     };
     return (
       <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${styles[s] || ''}`}>
@@ -191,6 +209,16 @@ const AppContent = () => {
   // Active user session immediately loads corresponding dashboard layout
   if (user) {
     return <Dashboard />;
+  }
+
+  // All Grievances page (full database view)
+  if (currentPage === 'all-grievances') {
+    return (
+      <AllGrievances
+        onBack={() => setCurrentPage('home')}
+        departments={departments}
+      />
+    );
   }
 
   return (
@@ -308,16 +336,25 @@ const AppContent = () => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-blue-400" />
-              <h3 className="font-extrabold text-lg text-slate-200">Public Grievance Transparency Feed</h3>
+              <h3 className="font-extrabold text-lg text-slate-200">Latest Public Grievances</h3>
             </div>
-            <div className="relative max-w-xs w-full">
-              <input
-                type="text"
-                placeholder="Search ticket logs..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-all text-xs font-semibold"
-              />
+            <div className="flex items-center gap-3">
+              <div className="relative max-w-xs w-full">
+                <input
+                  type="text"
+                  placeholder="Search ticket logs..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-all text-xs font-semibold"
+                />
+              </div>
+              <button
+                onClick={() => setCurrentPage('all-grievances')}
+                className="px-3 py-1.5 bg-blue-950/40 hover:bg-blue-900/40 border border-blue-900/30 text-blue-400 hover:text-blue-300 rounded-lg text-[10px] font-bold tracking-wide transition-all cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                View All Grievances
+              </button>
             </div>
           </div>
 
@@ -358,20 +395,35 @@ const AppContent = () => {
                       </td>
                       <td className="py-4 px-4">
                         {getStatusBadge(row.status)}
+                        {row.sla_violated && (
+                          <span className="ml-1 px-1.5 py-0.5 bg-rose-950/60 text-rose-400 border border-rose-800/50 text-[8px] font-extrabold uppercase rounded-full">SLA</span>
+                        )}
                       </td>
                       <td className="py-4 px-4 text-slate-500">
                         {formatDate(row.created_at)}
                       </td>
                       <td className="py-4 px-4 text-right">
                         {row.status === 'resolved' ? (
-                          <button
-                            onClick={() => handleViewProof(row.id)}
-                            disabled={loadingProof}
-                            className="px-3 py-1.5 bg-emerald-950/40 hover:bg-emerald-950/80 border border-emerald-900/30 text-emerald-450 hover:text-emerald-400 rounded-lg text-[10px] font-bold tracking-wide transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            View Proof
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleViewProof(row.id)}
+                              disabled={loadingProof}
+                              className="px-3 py-1.5 bg-emerald-950/40 hover:bg-emerald-950/80 border border-emerald-900/30 text-emerald-450 hover:text-emerald-400 rounded-lg text-[10px] font-bold tracking-wide transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View Proof
+                            </button>
+                            {!row.proof_requested_at && (
+                              <button
+                                onClick={() => handleRequestProof(row.id)}
+                                disabled={requestingProof === row.id}
+                                className="px-3 py-1.5 bg-amber-950/40 hover:bg-amber-950/80 border border-amber-900/30 text-amber-400 hover:text-amber-300 rounded-lg text-[10px] font-bold tracking-wide transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+                              >
+                                <Clock className="w-3.5 h-3.5" />
+                                {requestingProof === row.id ? '...' : 'Request Proof'}
+                              </button>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-[10px] text-slate-650 font-bold italic select-none">Pending closure</span>
                         )}

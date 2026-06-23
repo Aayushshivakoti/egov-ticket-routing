@@ -32,10 +32,11 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
-
 @pytest.fixture(scope="module", autouse=True)
 def setup_database():
+    # Set override
+    app.dependency_overrides[get_db] = override_get_db
+
     # Setup tables
     Base.metadata.create_all(bind=engine)
     
@@ -72,6 +73,9 @@ def setup_database():
     db.close()
     
     yield
+    
+    # Clean override
+    app.dependency_overrides.pop(get_db, None)
     
     # Tear down tables
     Base.metadata.drop_all(bind=engine)
@@ -344,7 +348,8 @@ def test_resolve_ticket_without_proof_fails():
         f"/api/tickets/{ticket_id_val}/status",
         data={
             "status": "resolved",
-            "remarks": "Everything is fixed."
+            "remarks": "Everything is fixed.",
+            "report": "This is a detailed text report explaining the resolution."
         },
         headers={"Authorization": f"Bearer {dept_admin_token}"}
     )
@@ -359,7 +364,8 @@ def test_resolve_ticket_with_proof_success():
         f"/api/tickets/{ticket_id_val}/status",
         data={
             "status": "resolved",
-            "remarks": "Everything is fixed."
+            "remarks": "Everything is fixed.",
+            "report": "This is a detailed text report explaining the resolution."
         },
         files=file_data,
         headers={"Authorization": f"Bearer {dept_admin_token}"}

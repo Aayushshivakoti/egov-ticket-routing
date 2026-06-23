@@ -1,20 +1,49 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Inbox, Eye, Cpu, X, FileText, CheckCircle2, Loader } from 'lucide-react';
+import { Inbox, Eye, Cpu, X, FileText, CheckCircle2, Loader, UserPlus } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBadge, getDepartmentName }) => {
+  const { user } = useAuth();
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [statusVal, setStatusVal] = useState('pending');
   const [remarksVal, setRemarksVal] = useState('');
+  const [reportVal, setReportVal] = useState('');
+  const [assignedStaffId, setAssignedStaffId] = useState('');
   const [updating, setUpdating] = useState(false);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [proofFiles, setProofFiles] = useState([]);
+
+  // Department Head Personnel state
+  const [employees, setEmployees] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+
+  const fetchDeptEmployees = async () => {
+    if (!user?.department_id) return;
+    setLoadingEmployees(true);
+    try {
+      const res = await api.get(`/departments/${user.department_id}/employees`);
+      setEmployees(res.data);
+    } catch (err) {
+      console.error("Failed to load department employees:", err);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.dept_role === 'Department Head') {
+      fetchDeptEmployees();
+    }
+  }, [user]);
 
   const handleOpenModal = (ticket) => {
     setSelectedTicket(ticket);
     setStatusVal(ticket.status);
     setRemarksVal(ticket.remarks || '');
+    setReportVal(ticket.report || '');
+    setAssignedStaffId(ticket.assigned_employee_id || '');
     setActiveMediaIndex(0);
     setProofFiles([]);
     setModalOpen(true);
@@ -23,6 +52,8 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
   const handleCloseModal = () => {
     setSelectedTicket(null);
     setProofFiles([]);
+    setReportVal('');
+    setAssignedStaffId('');
     setModalOpen(false);
   };
 
@@ -30,18 +61,31 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
     e.preventDefault();
     if (!selectedTicket) return;
 
-    if (statusVal === 'resolved' && proofFiles.length === 0) {
-      alert("Resolution proof is mandatory when status is set to Resolved. Please upload a media file.");
-      return;
+    if (statusVal === 'resolved') {
+      if (!reportVal.trim()) {
+        alert("A text resolution report is mandatory when status is set to Resolved.");
+        return;
+      }
+      if (proofFiles.length === 0) {
+        alert("Resolution proof is mandatory when status is set to Resolved. Please upload a media file.");
+        return;
+      }
     }
 
     setUpdating(true);
 
     try {
+      if (user?.dept_role === 'Department Head') {
+        await api.post(`/tickets/${selectedTicket.id}/assign`, {
+          assigned_employee_id: assignedStaffId ? parseInt(assignedStaffId) : null
+        });
+      }
+
       const formData = new FormData();
       formData.append('status', statusVal);
       formData.append('remarks', remarksVal);
       if (statusVal === 'resolved') {
+        formData.append('report', reportVal);
         proofFiles.forEach((file) => {
           formData.append('files', file);
         });
@@ -308,20 +352,42 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
               {/* Status Update Form */}
               <form onSubmit={handleSaveStatus} className="space-y-4 pt-2 border-t border-slate-800">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="sm:col-span-1">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2" htmlFor="modal-status">
-                      Resolution State
-                    </label>
-                    <select
-                      id="modal-status"
-                      value={statusVal}
-                      onChange={(e) => setStatusVal(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 transition-all text-xs"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="resolved">Resolved</option>
-                    </select>
+                  <div className="sm:col-span-1 space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2" htmlFor="modal-status">
+                        Resolution State
+                      </label>
+                      <select
+                        id="modal-status"
+                        value={statusVal}
+                        onChange={(e) => setStatusVal(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 transition-all text-xs"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="Under Re-evaluation">Under Re-evaluation</option>
+                      </select>
+                    </div>
+
+                    {user?.dept_role === 'Department Head' && (
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2" htmlFor="modal-assignee">
+                          Assign Officer / Staff
+                        </label>
+                        <select
+                          id="modal-assignee"
+                          value={assignedStaffId}
+                          onChange={(e) => setAssignedStaffId(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 transition-all text-xs font-semibold"
+                        >
+                          <option value="">Unassigned</option>
+                          {employees.map(emp => (
+                            <option key={emp.id} value={emp.id}>{emp.name} ({emp.dept_role || 'Staff'})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="sm:col-span-2">
@@ -333,37 +399,52 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
                       placeholder="Enter status update notes or final resolution remarks..."
                       value={remarksVal}
                       onChange={(e) => setRemarksVal(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 transition-all text-xs h-16 resize-none"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 transition-all text-xs h-28 resize-none"
                     />
                   </div>
                 </div>
 
                 {statusVal === 'resolved' && (
-                  <div className="pt-2">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                      Resolution Media Proof (Mandatory)
-                    </label>
-                    <div className="p-4 bg-slate-950 border border-dashed border-slate-800 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-blue-500/50 transition-all relative">
-                      <input
-                        id="proof-upload-input"
-                        type="file"
-                        multiple
-                        onChange={(e) => {
-                          if (e.target.files) {
-                            setProofFiles(Array.from(e.target.files));
-                          }
-                        }}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  <div className="pt-2 space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        Resolution Text Report (Mandatory)
+                      </label>
+                      <textarea
+                        placeholder="Provide a detailed text report explaining the resolution steps..."
+                        value={reportVal}
+                        onChange={(e) => setReportVal(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 transition-all text-xs h-20 resize-none font-medium"
                         required
-                        accept="image/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp4,audio/m4a"
                       />
-                      <FileText className="w-8 h-8 text-blue-500 animate-pulse" />
-                      <p className="text-xs text-slate-300 font-bold text-center">
-                        Drag & drop or click to upload proof
-                      </p>
-                      <p className="text-[10px] text-slate-500 text-center font-medium">
-                        Supported: Images, MP4/MOV Videos, MP3/WAV/M4A Audios
-                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                        Resolution Media Proof (Mandatory)
+                      </label>
+                      <div className="p-4 bg-slate-950 border border-dashed border-slate-800 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-blue-500/50 transition-all relative">
+                        <input
+                          id="proof-upload-input"
+                          type="file"
+                          multiple
+                          onChange={(e) => {
+                            if (e.target.files) {
+                              setProofFiles(Array.from(e.target.files));
+                            }
+                          }}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          required
+                          accept="image/*,video/mp4,video/quicktime,audio/mpeg,audio/wav,audio/mp4,audio/m4a"
+                        />
+                        <FileText className="w-8 h-8 text-blue-500 animate-pulse" />
+                        <p className="text-xs text-slate-300 font-bold text-center">
+                          Drag & drop or click to upload proof
+                        </p>
+                        <p className="text-[10px] text-slate-500 text-center font-medium">
+                          Supported: Images, MP4/MOV Videos, MP3/WAV/M4A Audios
+                        </p>
+                      </div>
                     </div>
                     {proofFiles.length > 0 && (
                       <div className="mt-3 bg-slate-950/40 border border-slate-850 p-3 rounded-xl space-y-1.5">
@@ -400,6 +481,83 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* Department Head Personnel Panel */}
+      {user?.dept_role === 'Department Head' && (
+        <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-850 pb-3">
+            <UserPlus className="w-5 h-5 text-emerald-400" />
+            <h2 className="font-extrabold text-base text-slate-200">Department Staff Management</h2>
+          </div>
+          {loadingEmployees ? (
+            <div className="flex flex-col items-center justify-center py-10 text-slate-500 gap-2">
+              <Loader className="w-5 h-5 animate-spin text-blue-500" />
+              <span className="text-[9px] font-bold uppercase tracking-widest">Loading Personnel...</span>
+            </div>
+          ) : employees.length === 0 ? (
+            <p className="text-xs text-slate-500">No other employees in this department.</p>
+          ) : (
+            <div className="overflow-x-auto border border-slate-850 rounded-xl bg-slate-950/20">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-850 bg-slate-950/40 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                    <th className="py-2.5 px-3">Name & Email</th>
+                    <th className="py-2.5 px-3">Employee ID</th>
+                    <th className="py-2.5 px-3">Role</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-855/60 text-xs">
+                  {employees.map((emp) => (
+                    <tr key={emp.id} className="hover:bg-slate-950/10">
+                      <td className="py-3 px-3">
+                        <p className="font-semibold text-slate-200">{emp.name}</p>
+                        <p className="text-[10px] text-slate-505">{emp.email}</p>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[10px] text-slate-400">
+                        {emp.employee_id_or_passport || 'N/A'}
+                      </td>
+                      <td className="py-3 px-3">
+                        <select
+                          value={emp.dept_role || ''}
+                          onChange={async (e) => {
+                            try {
+                              const res = await api.put(`/departments/employees/${emp.id}/role`, {
+                                dept_role: e.target.value
+                              });
+                              alert(res.data.detail || 'Role change requested!');
+                              fetchDeptEmployees();
+                            } catch (err) {
+                              alert(err.response?.data?.detail || 'Failed to request role change.');
+                            }
+                          }}
+                          className="px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[10px] font-bold text-slate-350 focus:outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="">Select Role</option>
+                          <option value="Department Head">Department Head</option>
+                          <option value="Field Operator">Field Operator</option>
+                          <option value="Support Rep">Support Rep</option>
+                        </select>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-full ${
+                          emp.status === 'active' ? 'bg-emerald-950/40 text-emerald-450 border border-emerald-900/40' : 'bg-rose-950/40 text-rose-455 border border-rose-900/40'
+                        }`}>
+                          {emp.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-right text-slate-500 italic">
+                        Approval Pipeline Active
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -19,3 +19,11 @@ celery_app.conf.update(
     timezone="Asia/Kathmandu",
     enable_utc=True,
 )
+
+# Celery Beat schedule for periodic SLA violation checks
+celery_app.conf.beat_schedule = {
+    "check-sla-violations-every-30-min": {
+        "task": "app.tasks.check_sla_violations",
+        "schedule": 1800.0,  # Every 30 minutes (1800 seconds)
+    },
+}

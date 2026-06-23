@@ -4,9 +4,10 @@ from typing import List, Optional
 import os
 import uuid
 import shutil
+import datetime
 from app.db import get_db
 from app.models import Ticket, Department, User, TicketAttachment
-from app.schemas import TicketResponse, TicketUpdate, TicketStatusUpdate
+from app.schemas import TicketResponse, TicketUpdate, TicketStatusUpdate, TicketAssignRequest
 from app.api.auth_utils import get_current_user
 from app.classifier import get_reasoning_keywords
 from app.email_utils import send_mock_email
@@ -329,6 +330,7 @@ def update_ticket_status_explicit(
     ticket_id: int,
     status: str = Form(...),
     remarks: Optional[str] = Form(None),
+    report: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -351,14 +353,19 @@ def update_ticket_status_explicit(
             detail="You can only manage tickets assigned to your department."
         )
         
-    if status not in ["processing", "pending", "in_progress", "resolved"]:
+    if status not in ["processing", "pending", "in_progress", "resolved", "sla_violated", "Under Re-evaluation"]:
         raise HTTPException(
             status_code=400,
-            detail="Invalid status. Must be one of processing, pending, in_progress, resolved."
+            detail="Invalid status. Must be one of processing, pending, in_progress, resolved, sla_violated, Under Re-evaluation."
         )
         
-    # Enforce media proof validation for resolved status
+    # Enforce media proof and text report validation for resolved status
     if status == "resolved":
+        if not report or report.strip() == "":
+            raise HTTPException(
+                status_code=400,
+                detail="A text resolution report is mandatory when status is set to Resolved."
+            )
         if not files or all(f.filename == "" for f in files):
             raise HTTPException(
                 status_code=400,
@@ -372,6 +379,8 @@ def update_ticket_status_explicit(
     old_status = ticket.status
     ticket.status = status
     ticket.remarks = remarks
+    if status == "resolved":
+        ticket.report = report
     
     db.commit()
     db.refresh(ticket)
@@ -417,8 +426,11 @@ def get_public_stats(db: Session = Depends(get_db)):
     }
 
 @router.get("/public/feed")
-def get_public_feed(db: Session = Depends(get_db)):
-    tickets = db.query(Ticket).order_by(Ticket.created_at.desc()).all()
+def get_public_feed(limit: Optional[int] = 8, db: Session = Depends(get_db)):
+    query = db.query(Ticket).order_by(Ticket.created_at.desc())
+    if limit and limit > 0:
+        query = query.limit(limit)
+    tickets = query.all()
     feed = []
     for t in tickets:
         feed.append({
@@ -426,9 +438,60 @@ def get_public_feed(db: Session = Depends(get_db)):
             "title": t.title,
             "assigned_department_id": t.assigned_department_id,
             "status": t.status,
-            "created_at": t.created_at
+            "created_at": t.created_at,
+            "sla_violated": t.sla_violated,
+            "proof_requested_at": t.proof_requested_at
         })
     return feed
+
+@router.get("/public/all")
+def get_public_all_grievances(
+    search: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Ticket)
+    
+    # Keyword / Ticket ID search
+    if search:
+        search_term = search.strip()
+        # Check if searching by ticket ID (e.g. "T-5" or just "5")
+        ticket_id_search = search_term.replace("T-", "").replace("#", "").strip()
+        if ticket_id_search.isdigit():
+            query = query.filter(Ticket.id == int(ticket_id_search))
+        else:
+            query = query.filter(Ticket.title.ilike(f"%{search_term}%"))
+    
+    # Status checkboxes filter (comma-separated: "pending,in_progress,resolved")
+    if status_filter:
+        statuses = [s.strip() for s in status_filter.split(",") if s.strip()]
+        if statuses:
+            query = query.filter(Ticket.status.in_(statuses))
+    
+    total = query.count()
+    offset = (page - 1) * page_size
+    tickets = query.order_by(Ticket.created_at.desc()).offset(offset).limit(page_size).all()
+    
+    feed = []
+    for t in tickets:
+        feed.append({
+            "id": t.id,
+            "title": t.title,
+            "assigned_department_id": t.assigned_department_id,
+            "status": t.status,
+            "created_at": t.created_at,
+            "sla_violated": t.sla_violated,
+            "proof_requested_at": t.proof_requested_at
+        })
+    return {
+        "tickets": feed,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size
+    }
 
 @router.get("/public/{ticket_id}/proof")
 def get_public_ticket_proof(ticket_id: int, db: Session = Depends(get_db)):
@@ -457,5 +520,195 @@ def get_public_ticket_proof(ticket_id: int, db: Session = Depends(get_db)):
         "ticket_id": ticket_id,
         "title": ticket.title,
         "remarks": ticket.remarks,
+        "report": ticket.report,
         "attachments": attachments_data
     }
+
+@router.post("/{ticket_id}/request-proof")
+def request_proof(
+    ticket_id: int,
+    db: Session = Depends(get_db)
+):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if ticket.status != "resolved":
+        raise HTTPException(status_code=400, detail="Proof can only be requested for resolved tickets")
+    
+    # Check if proof already exists
+    from app.models import TicketAttachment
+    existing_proof = db.query(TicketAttachment).filter(
+        TicketAttachment.ticket_id == ticket_id,
+        TicketAttachment.is_proof == True
+    ).first()
+    if existing_proof:
+        raise HTTPException(status_code=400, detail="Resolution proof already exists for this ticket")
+    
+    ticket.proof_requested_at = datetime.datetime.utcnow()
+    db.commit()
+    db.refresh(ticket)
+    
+    # Send notification to department admin
+    if ticket.assigned_department_id:
+        dept_admins = db.query(User).filter(
+            User.department_id == ticket.assigned_department_id,
+            User.role == "dept_admin",
+            User.status == "active"
+        ).all()
+        for admin in dept_admins:
+            send_mock_email(
+                admin.email,
+                f"Proof of Resolution Requested - Ticket #{ticket.id}",
+                f"Hello {admin.name},\n\nA proof of resolution has been requested for ticket #{ticket.id} titled '{ticket.title}'.\n\nPlease upload the resolution proof within 24 hours to avoid SLA violation.\n\nThank you,\nE-Governance Helpdesk Team"
+            )
+    
+    return {"detail": "Proof request sent successfully", "proof_requested_at": ticket.proof_requested_at}
+
+@router.get("/sla-violations")
+def get_sla_violations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can view SLA violations")
+    
+    violated_tickets = db.query(Ticket).filter(
+        Ticket.proof_requested_at.isnot(None),
+        Ticket.sla_violated == True
+    ).order_by(Ticket.proof_requested_at.desc()).all()
+    
+    result = []
+    for t in violated_tickets:
+        dept_name = None
+        if t.assigned_department:
+            dept_name = t.assigned_department.name
+        result.append({
+            "id": t.id,
+            "title": t.title,
+            "status": t.status,
+            "assigned_department_id": t.assigned_department_id,
+            "department_name": dept_name,
+            "proof_requested_at": t.proof_requested_at,
+            "sla_violated": t.sla_violated
+        })
+    return result
+
+@router.post("/{ticket_id}/send-explanation-notice")
+def send_explanation_notice(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can send explanation notices")
+    
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    if not ticket.sla_violated:
+        raise HTTPException(status_code=400, detail="Ticket is not in SLA violation state")
+    
+    # Send notice to all admins of the assigned department
+    if ticket.assigned_department_id:
+        dept_admins = db.query(User).filter(
+            User.department_id == ticket.assigned_department_id,
+            User.role == "dept_admin"
+        ).all()
+        dept = ticket.assigned_department
+        for admin in dept_admins:
+            send_mock_email(
+                admin.email,
+                f"URGENT: Explanation Notice for SLA Violation - Ticket #{ticket.id}",
+                f"Hello {admin.name},\n\nThis is an official explanation notice regarding SLA violation for ticket #{ticket.id} titled '{ticket.title}'.\n\nYour department ({dept.name if dept else 'Unknown'}) has failed to provide resolution proof within the mandated 24-hour window.\n\nPlease provide an explanation and upload the required proof immediately.\n\nThis notice has been logged by Super Admin ({current_user.name}).\n\nE-Governance Helpdesk Administration"
+            )
+    
+    return {"detail": f"Explanation notice sent to department admins for ticket #{ticket_id}"}
+
+
+@router.post("/{ticket_id}/assign", response_model=TicketResponse)
+def assign_ticket(
+    ticket_id: int,
+    req: TicketAssignRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    if current_user.role == "super_admin":
+        pass
+    elif current_user.role == "dept_admin" and current_user.dept_role == "Department Head":
+        if ticket.assigned_department_id != current_user.department_id:
+            raise HTTPException(status_code=403, detail="You can only assign tickets within your department.")
+    else:
+        raise HTTPException(status_code=403, detail="Only Department Heads or Super Admins can assign staff.")
+        
+    if req.assigned_employee_id:
+        employee = db.query(User).filter(User.id == req.assigned_employee_id).first()
+        if not employee or employee.role != "dept_admin":
+            raise HTTPException(status_code=400, detail="Invalid employee ID.")
+        if ticket.assigned_department_id and employee.department_id != ticket.assigned_department_id:
+            raise HTTPException(status_code=400, detail="Employee must belong to the ticket's assigned department.")
+        ticket.assigned_employee_id = req.assigned_employee_id
+    else:
+        ticket.assigned_employee_id = None
+        
+    db.commit()
+    db.refresh(ticket)
+    return attach_telemetry_fields(ticket, db)
+
+
+@router.post("/{ticket_id}/request-reassignment", response_model=TicketResponse)
+def request_reassignment(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if ticket.citizen_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the filing citizen can request officer changes.")
+        
+    ticket.reassignment_requested = True
+    db.commit()
+    db.refresh(ticket)
+    return attach_telemetry_fields(ticket, db)
+
+
+@router.post("/{ticket_id}/re-evaluate", response_model=TicketResponse)
+def re_evaluate_ticket(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    background_tasks: BackgroundTasks = None
+):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if ticket.citizen_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the filing citizen can request re-evaluation.")
+    if ticket.status != "resolved":
+        raise HTTPException(status_code=400, detail="Only resolved tickets can be re-evaluated.")
+        
+    ticket.status = "Under Re-evaluation"
+    ticket.reassignment_requested = False
+    db.commit()
+    db.refresh(ticket)
+    
+    dept_head = db.query(User).filter(
+        User.department_id == ticket.assigned_department_id,
+        User.dept_role == "Department Head"
+    ).first()
+    if dept_head and background_tasks:
+        background_tasks.add_task(
+            send_mock_email,
+            dept_head.email,
+            f"Re-evaluation Requested - Ticket #{ticket.id}",
+            f"Hello {dept_head.name},\n\nThe citizen has requested a re-evaluation for Ticket #{ticket.id} ('{ticket.title}').\n\nPlease review the case.\n\nThank you,\nE-Governance Helpdesk Team"
+        )
+        
+    return attach_telemetry_fields(ticket, db)
+

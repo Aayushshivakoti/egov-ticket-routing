@@ -431,14 +431,60 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
                         <span className="font-semibold text-slate-300 text-xs">
                           {getDepartmentName(ticket.assigned_department_id)}
                         </span>
+                        {ticket.assigned_employee ? (
+                          <div className="mt-1">
+                            <span className="text-[10px] text-emerald-450 font-bold block">
+                              Assigned: {ticket.assigned_employee.name}
+                            </span>
+                            {!ticket.reassignment_requested ? (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await api.post(`/tickets/${ticket.id}/request-reassignment`);
+                                    alert('Officer change request sent successfully!');
+                                    onRefresh();
+                                  } catch (err) {
+                                    alert('Failed to request officer change.');
+                                  }
+                                }}
+                                className="mt-1 px-2 py-0.5 bg-amber-950/40 hover:bg-amber-950/80 border border-amber-900/30 text-amber-400 rounded text-[9px] font-bold cursor-pointer transition-all"
+                              >
+                                Request Officer Change
+                              </button>
+                            ) : (
+                              <span className="text-[9px] text-amber-500 font-bold block mt-1">Reassignment Pending</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[9px] text-slate-600 block mt-0.5 italic">Unassigned</span>
+                        )}
                         {ticket.ai_confidence !== null && (
-                          <span className="text-[9px] text-slate-500 block">
+                          <span className="text-[9px] text-slate-500 block mt-1">
                             AI Confidence: {(ticket.ai_confidence * 100).toFixed(0)}%
                           </span>
                         )}
                       </td>
                       <td className="py-4 px-4">
                         {getStatusBadge(ticket.status)}
+                        {ticket.status === 'resolved' && (
+                          <div className="mt-2">
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm('Are you sure you want to request re-evaluation for this ticket?')) return;
+                                try {
+                                  await api.post(`/tickets/${ticket.id}/re-evaluate`);
+                                  alert('Re-evaluation request submitted successfully!');
+                                  onRefresh();
+                                } catch (err) {
+                                  alert(err.response?.data?.detail || 'Failed to submit re-evaluation.');
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-blue-950/40 hover:bg-blue-950/80 border border-blue-900/30 text-blue-400 rounded-lg text-[9px] font-bold cursor-pointer transition-all block text-center"
+                            >
+                              Request Re-evaluation / Ask Question
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

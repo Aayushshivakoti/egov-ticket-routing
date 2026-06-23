@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import { Chart, registerables } from 'chart.js';
-import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle } from 'lucide-react';
+import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send } from 'lucide-react';
 
 Chart.register(...registerables);
 
@@ -16,14 +16,81 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
   const [deptError, setDeptError] = useState('');
   const [deptSuccess, setDeptSuccess] = useState('');
 
-  // Admin provisioning form state
-  const [adminName, setAdminName] = useState('');
-  const [adminEmail, setAdminEmail] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
-  const [adminDeptId, setAdminDeptId] = useState('');
-  const [provisioningAdmin, setProvisioningAdmin] = useState(false);
-  const [adminError, setAdminError] = useState('');
-  const [adminSuccess, setAdminSuccess] = useState('');
+  // Department Personnel dual-pane state
+  const [selectedDeptId, setSelectedDeptId] = useState(null);
+  const [employees, setEmployees] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+
+  // New Employee Modal state
+  const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
+  const [newEmployeeName, setNewEmployeeName] = useState('');
+  const [newEmployeeEmail, setNewEmployeeEmail] = useState('');
+  const [newEmployeePassword, setNewEmployeePassword] = useState('');
+  const [newEmployeeIdOrPassport, setNewEmployeeIdOrPassport] = useState('');
+  const [newEmployeeRole, setNewEmployeeRole] = useState('');
+  const [employeeError, setEmployeeError] = useState('');
+  const [employeeSuccess, setEmployeeSuccess] = useState('');
+
+  // Transfer Modal state
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [transferTargetDeptId, setTransferTargetDeptId] = useState('');
+  const [transferError, setTransferError] = useState('');
+
+  // SLA Violations state
+  const [slaViolations, setSlaViolations] = useState([]);
+  const [loadingSla, setLoadingSla] = useState(true);
+
+  // Approvals Queue state
+  const [pendingChanges, setPendingChanges] = useState([]);
+  const [loadingChanges, setLoadingChanges] = useState(false);
+
+  const fetchPendingChanges = async () => {
+    setLoadingChanges(true);
+    try {
+      const res = await api.get('/departments/role-changes/pending');
+      setPendingChanges(res.data);
+    } catch (err) {
+      console.error("Failed to load pending role changes:", err);
+    } finally {
+      setLoadingChanges(false);
+    }
+  };
+
+  const handleApproveChange = async (changeId) => {
+    try {
+      await api.post(`/departments/role-changes/${changeId}/approve`);
+      alert('Role change approved successfully!');
+      fetchPendingChanges();
+      if (selectedDeptId) fetchEmployees(selectedDeptId);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to approve role change.');
+    }
+  };
+
+  const handleRejectChange = async (changeId) => {
+    try {
+      await api.post(`/departments/role-changes/${changeId}/reject`);
+      alert('Role change rejected.');
+      fetchPendingChanges();
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to reject role change.');
+    }
+  };
+
+  const handleRoleChange = async (employeeId, newRole) => {
+    if (!newRole) return;
+    try {
+      const res = await api.put(`/departments/employees/${employeeId}/role`, {
+        dept_role: newRole
+      });
+      alert(res.data.detail || 'Role change processed successfully!');
+      fetchPendingChanges();
+      fetchEmployees(selectedDeptId);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to update employee role.');
+    }
+  };
 
   const handleCreateDept = async (e) => {
     e.preventDefault();
@@ -48,33 +115,104 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
     }
   };
 
-  const handleProvisionAdmin = async (e) => {
+  const fetchEmployees = async (deptId) => {
+    if (!deptId) return;
+    setLoadingEmployees(true);
+    try {
+      const response = await api.get(`/departments/${deptId}/employees`);
+      setEmployees(response.data);
+    } catch (err) {
+      console.error("Failed to load department employees:", err);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  };
+
+  useEffect(() => {
+    if (departments && departments.length > 0 && !selectedDeptId) {
+      setSelectedDeptId(departments[0].id);
+    }
+  }, [departments]);
+
+  useEffect(() => {
+    if (selectedDeptId) {
+      fetchEmployees(selectedDeptId);
+    }
+  }, [selectedDeptId]);
+
+  const handleToggleSuspend = async (employee) => {
+    try {
+      const endpoint = employee.status === 'suspended' ? 'activate' : 'suspend';
+      await api.post(`/departments/employees/${employee.id}/${endpoint}`);
+      fetchEmployees(selectedDeptId);
+    } catch (err) {
+      console.error("Failed to toggle suspension:", err);
+      alert(err.response?.data?.detail || "Failed to update employee status.");
+    }
+  };
+
+  const handleRemoveEmployee = async (employeeId) => {
+    if (!window.confirm("Are you sure you want to remove this employee account?")) return;
+    try {
+      await api.delete(`/departments/employees/${employeeId}`);
+      fetchEmployees(selectedDeptId);
+    } catch (err) {
+      console.error("Failed to delete employee:", err);
+      alert(err.response?.data?.detail || "Failed to delete employee.");
+    }
+  };
+
+  const handleTransferEmployee = async (e) => {
     e.preventDefault();
-    if (!adminName.trim() || !adminEmail.trim() || !adminPassword.trim() || !adminDeptId) {
-      setAdminError('All fields are required.');
+    if (!selectedEmployee || !transferTargetDeptId) return;
+    setTransferError('');
+    try {
+      await api.post(`/departments/employees/${selectedEmployee.id}/transfer`, {
+        department_id: parseInt(transferTargetDeptId)
+      });
+      setIsTransferModalOpen(false);
+      setSelectedEmployee(null);
+      setTransferTargetDeptId('');
+      fetchEmployees(selectedDeptId);
+    } catch (err) {
+      console.error("Failed to transfer employee:", err);
+      setTransferError(err.response?.data?.detail || "Failed to transfer employee.");
+    }
+  };
+
+  const handleAddEmployee = async (e) => {
+    e.preventDefault();
+    if (!newEmployeeName.trim() || !newEmployeeEmail.trim() || !newEmployeePassword.trim() || !newEmployeeIdOrPassport.trim()) {
+      setEmployeeError("All fields are required.");
       return;
     }
-    setProvisioningAdmin(true);
-    setAdminError('');
-    setAdminSuccess('');
+    setEmployeeError('');
+    setEmployeeSuccess('');
     try {
       await api.post('/auth/provision', {
-        name: adminName,
-        email: adminEmail,
-        password: adminPassword,
+        name: newEmployeeName,
+        email: newEmployeeEmail,
+        password: newEmployeePassword,
         role: 'dept_admin',
-        department_id: parseInt(adminDeptId)
+        department_id: selectedDeptId,
+        employee_id_or_passport: newEmployeeIdOrPassport,
+        status: 'active',
+        dept_role: newEmployeeRole || null
       });
-      setAdminSuccess(`Departmental Admin "${adminName}" provisioned successfully!`);
-      setAdminName('');
-      setAdminEmail('');
-      setAdminPassword('');
-      setAdminDeptId('');
+      setEmployeeSuccess(`Employee "${newEmployeeName}" added successfully!`);
+      setNewEmployeeName('');
+      setNewEmployeeEmail('');
+      setNewEmployeePassword('');
+      setNewEmployeeIdOrPassport('');
+      setNewEmployeeRole('');
+      fetchEmployees(selectedDeptId);
+      setTimeout(() => {
+        setIsEmployeeModalOpen(false);
+        setEmployeeSuccess('');
+      }, 1500);
     } catch (err) {
       console.error(err);
-      setAdminError(err.response?.data?.detail || 'Failed to provision admin account.');
-    } finally {
-      setProvisioningAdmin(false);
+      setEmployeeError(err.response?.data?.detail || 'Failed to add employee.');
     }
   };
   
@@ -99,7 +237,31 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
 
   useEffect(() => {
     fetchTelemetry();
+    fetchSlaViolations();
+    fetchPendingChanges();
   }, [tickets]);
+
+  const fetchSlaViolations = async () => {
+    try {
+      const response = await api.get('/tickets/sla-violations');
+      setSlaViolations(response.data);
+    } catch (err) {
+      console.error("Failed to load SLA violations:", err);
+    } finally {
+      setLoadingSla(false);
+    }
+  };
+
+  const handleSendExplanationNotice = async (ticketId) => {
+    if (!window.confirm('Send an official explanation notice to the defaulting department?')) return;
+    try {
+      await api.post(`/tickets/${ticketId}/send-explanation-notice`);
+      alert('Explanation notice sent successfully.');
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || 'Failed to send explanation notice.');
+    }
+  };
 
   useEffect(() => {
     if (!telemetry) return;
@@ -250,6 +412,62 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
 
   return (
     <div className="space-y-8">
+
+      {/* Role Approvals Queue */}
+      {pendingChanges.length > 0 && (
+        <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl shadow-amber-950/5 animate-pulse-slow">
+          <div className="flex items-center gap-2 mb-4 border-b border-slate-800 pb-3">
+            <ShieldAlert className="w-5 h-5 text-amber-400" />
+            <h2 className="font-extrabold text-base text-slate-200">Role Approvals Queue</h2>
+          </div>
+          <div className="overflow-x-auto border border-slate-850 rounded-xl bg-slate-950/20">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-850 bg-slate-950/40 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                  <th className="py-2.5 px-3">Employee</th>
+                  <th className="py-2.5 px-3">Department</th>
+                  <th className="py-2.5 px-3">Requested Role</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-855/60 text-xs">
+                {pendingChanges.map((change) => (
+                  <tr key={change.id} className="hover:bg-slate-950/10">
+                    <td className="py-3 px-3">
+                      <p className="font-semibold text-slate-200">{change.user?.name || `User ID: ${change.user_id}`}</p>
+                      <p className="text-[10px] text-slate-505 font-mono">{change.user?.email}</p>
+                    </td>
+                    <td className="py-3 px-3 text-slate-450 font-semibold">
+                      {getDepartmentName(change.user?.department_id)}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-full bg-amber-950/40 text-amber-400 border border-amber-900/40">
+                        {change.requested_role}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleApproveChange(change.id)}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition-all shadow-md shadow-emerald-500/10 cursor-pointer"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectChange(change.id)}
+                          className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[10px] font-bold transition-all shadow-md shadow-rose-500/10 cursor-pointer"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       
       {/* Telemetry Dashboard Row */}
       {telemetry && (
@@ -473,9 +691,9 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
       </section>
 
       {/* Entity Administration and Provisioning Section */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <section className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Create Custom Department Entity */}
-        <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between">
+        <div className="xl:col-span-1 p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-blue-400" />
@@ -532,96 +750,413 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
           </div>
         </div>
 
-        {/* Provision Departmental Admin Accounts */}
-        <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-emerald-400" />
-              <h2 className="font-extrabold text-lg text-slate-200" id="supervisor-admin-title">Provision Dept Admin</h2>
+        {/* Advanced Staff Management & Access Control (Dual-Pane) */}
+        <div className="xl:col-span-2 p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between">
+          <div className="space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-850 pb-3">
+              <div className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-emerald-400" />
+                <h2 className="font-extrabold text-lg text-slate-200" id="supervisor-personnel-title">Department Personnel & Access</h2>
+              </div>
+              <span className="text-xs text-slate-500 font-semibold">Staff Management</span>
             </div>
-            <p className="text-xs text-slate-400 leading-normal">
-              Register and link new departmental administrative accounts to manage and resolve complaints for designated departments.
-            </p>
-            {adminError && (
-              <div className="p-3.5 bg-rose-950/40 border border-rose-800/60 text-rose-300 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
-                <ShieldAlert className="w-4 h-4 text-rose-450" />
-                {adminError}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Left Panel: Active Departments */}
+              <div className="md:col-span-1 space-y-2 border-r border-slate-850 pr-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-3 block">Select Department</p>
+                <div className="space-y-1.5 overflow-y-auto max-h-80">
+                  {departments.map((dept) => {
+                    const isSelected = selectedDeptId === dept.id;
+                    return (
+                      <div
+                        key={dept.id}
+                        onClick={() => setSelectedDeptId(dept.id)}
+                        className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${
+                          isSelected
+                            ? 'bg-blue-950/20 border-blue-900/60 text-blue-400 font-bold'
+                            : 'bg-slate-950/20 border-slate-850 text-slate-400 hover:border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0 pr-2">
+                          <p className="text-xs truncate">{dept.name}</p>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDeptId(dept.id);
+                            setIsEmployeeModalOpen(true);
+                          }}
+                          className="p-1.5 bg-slate-900 hover:bg-emerald-950/40 text-slate-400 hover:text-emerald-400 border border-slate-800/80 rounded-lg opacity-60 group-hover:opacity-100 transition-all"
+                          title="Add New Employee to this department"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            )}
-            {adminSuccess && (
-              <div className="p-3.5 bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
-                <CheckCircle2 className="w-4 h-4 text-emerald-450" />
-                {adminSuccess}
+
+              {/* Right Panel: Data Table of Assigned Employees */}
+              <div className="md:col-span-2 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Assigned Employees ({employees.length})
+                  </span>
+                  {selectedDeptId && (
+                    <button
+                      onClick={() => setIsEmployeeModalOpen(true)}
+                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-all shadow-md shadow-emerald-500/10 flex items-center gap-1"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" /> Add Employee
+                    </button>
+                  )}
+                </div>
+
+                {loadingEmployees ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-2">
+                    <Loader className="w-6 h-6 animate-spin text-blue-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Loading Personnel...</span>
+                  </div>
+                ) : employees.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-slate-600 border border-dashed border-slate-800 rounded-xl text-center p-4">
+                    <UserPlus className="w-8 h-8 text-slate-755 mb-2" />
+                    <p className="text-xs font-bold text-slate-400">No employees assigned</p>
+                    <p className="text-[10px] text-slate-600 mt-1 max-w-[200px]">Provision a departmental admin account to manage this department's queue.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-slate-850 rounded-xl">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-850 bg-slate-950/40 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                          <th className="py-2.5 px-3">Name & Email</th>
+                          <th className="py-2.5 px-3">Employee ID</th>
+                          <th className="py-2.5 px-3">Role</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-855/60 text-xs">
+                        {employees.map((emp) => (
+                          <tr key={emp.id} className="hover:bg-slate-950/20 employee-row">
+                            <td className="py-3 px-3">
+                              <p className="font-semibold text-slate-200">{emp.name}</p>
+                              <p className="text-[10px] text-slate-500">{emp.email}</p>
+                            </td>
+                            <td className="py-3 px-3 font-mono text-[10px] text-slate-400">
+                              {emp.employee_id_or_passport || 'N/A'}
+                            </td>
+                            <td className="py-3 px-3">
+                              <select
+                                value={emp.dept_role || ''}
+                                onChange={(e) => handleRoleChange(emp.id, e.target.value)}
+                                className="px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[10px] font-bold text-slate-300 focus:outline-none focus:border-blue-500 cursor-pointer"
+                              >
+                                <option value="">Select Role</option>
+                                <option value="Department Head">Department Head</option>
+                                <option value="Field Operator">Field Operator</option>
+                                <option value="Support Rep">Support Rep</option>
+                              </select>
+                            </td>
+                            <td className="py-3 px-3">
+                              {emp.status === 'suspended' ? (
+                                <span className="px-2 py-0.5 bg-rose-950/40 text-rose-400 border border-rose-900/40 text-[9px] font-extrabold uppercase rounded-full">
+                                  Suspended
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 bg-emerald-950/40 text-emerald-450 border border-emerald-900/40 text-[9px] font-extrabold uppercase rounded-full">
+                                  Active
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* Suspend/Reactivate Toggle */}
+                                <button
+                                  onClick={() => handleToggleSuspend(emp)}
+                                  className={`p-1.5 border rounded-lg transition-all ${
+                                    emp.status === 'suspended'
+                                      ? 'bg-emerald-950/20 border-emerald-900/30 text-emerald-450 hover:bg-emerald-900/20'
+                                      : 'bg-rose-950/20 border-rose-900/30 text-rose-450 hover:bg-rose-900/20'
+                                  }`}
+                                  title={emp.status === 'suspended' ? 'Reactivate Login' : 'Suspend Account'}
+                                >
+                                  {emp.status === 'suspended' ? (
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <UserMinus className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+
+                                {/* Transfer Department */}
+                                <button
+                                  onClick={() => {
+                                    setSelectedEmployee(emp);
+                                    setTransferTargetDeptId(emp.department_id || '');
+                                    setIsTransferModalOpen(true);
+                                  }}
+                                  className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 rounded-lg transition-all"
+                                  title="Transfer Department"
+                                >
+                                  <FolderSync className="w-3.5 h-3.5" />
+                                </button>
+
+                                {/* Remove Account */}
+                                <button
+                                  onClick={() => handleRemoveEmployee(emp.id)}
+                                  className="p-1.5 bg-slate-900 hover:bg-rose-950/40 border border-slate-800 text-slate-450 hover:text-rose-450 rounded-lg transition-all"
+                                  title="Delete Employee"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            )}
-            <form onSubmit={handleProvisionAdmin} className="space-y-3 pt-2" id="provision-admin-form">
-              <div className="grid grid-cols-2 gap-3">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Add Employee Modal Overlay */}
+      {isEmployeeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl relative">
+            <button
+              onClick={() => setIsEmployeeModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 bg-slate-950/50 hover:bg-slate-950 text-slate-400 hover:text-slate-100 rounded-lg border border-slate-850"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-emerald-450" /> Add New Employee
+              </h3>
+              <p className="text-xs text-slate-500">
+                Provision a new Departmental Admin account for **{getDepartmentName(selectedDeptId)}**.
+              </p>
+
+              {employeeError && (
+                <div className="p-3 bg-rose-950/30 border border-rose-900/50 text-rose-400 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
+                  <ShieldAlert className="w-4 h-4" /> {employeeError}
+                </div>
+              )}
+              {employeeSuccess && (
+                <div className="p-3 bg-emerald-950/30 border border-emerald-900/50 text-emerald-400 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
+                  <CheckCircle2 className="w-4 h-4" /> {employeeSuccess}
+                </div>
+              )}
+
+              <form onSubmit={handleAddEmployee} className="space-y-3.5">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1" htmlFor="admin-name">Full Name</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Full Name</label>
                   <input
-                    id="admin-name"
                     type="text"
-                    placeholder="e.g. Ramesh Karki"
-                    value={adminName}
-                    onChange={(e) => setAdminName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-all text-xs font-medium"
                     required
+                    value={newEmployeeName}
+                    onChange={(e) => setNewEmployeeName(e.target.value)}
+                    placeholder="e.g. Sabin Shrestha"
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1" htmlFor="admin-email">Email Address</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Email Address</label>
                   <input
-                    id="admin-email"
                     type="email"
-                    placeholder="ramesh@egov.gov.np"
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-all text-xs font-medium"
                     required
+                    value={newEmployeeEmail}
+                    onChange={(e) => setNewEmployeeEmail(e.target.value)}
+                    placeholder="sabin@egov.gov.np"
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1" htmlFor="admin-password">Password</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Password</label>
                   <input
-                    id="admin-password"
                     type="password"
-                    placeholder="••••••••"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-all text-xs font-medium"
                     required
+                    value={newEmployeePassword}
+                    onChange={(e) => setNewEmployeePassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1" htmlFor="admin-dept">Assigned Dept</label>
-                  <select
-                    id="admin-dept"
-                    value={adminDeptId}
-                    onChange={(e) => setAdminDeptId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-emerald-500 transition-all text-xs font-semibold"
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Employee ID / Passport</label>
+                  <input
+                    type="text"
                     required
+                    value={newEmployeeIdOrPassport}
+                    onChange={(e) => setNewEmployeeIdOrPassport(e.target.value)}
+                    placeholder="e.g. EMP-98273"
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Department Role</label>
+                  <select
+                    value={newEmployeeRole}
+                    onChange={(e) => setNewEmployeeRole(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-blue-500 font-semibold"
                   >
-                    <option value="">Select Dept...</option>
+                    <option value="">Select Role (Optional)</option>
+                    <option value="Department Head">Department Head</option>
+                    <option value="Field Operator">Field Operator</option>
+                    <option value="Support Rep">Support Rep</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEmployeeModalOpen(false)}
+                    className="px-4 py-2 bg-slate-950 border border-slate-850 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-bold transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-emerald-500/10"
+                  >
+                    Add Employee
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Department Modal Overlay */}
+      {isTransferModalOpen && selectedEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl relative">
+            <button
+              onClick={() => {
+                setIsTransferModalOpen(false);
+                setSelectedEmployee(null);
+              }}
+              className="absolute top-4 right-4 p-1.5 bg-slate-950/50 hover:bg-slate-950 text-slate-400 hover:text-slate-100 rounded-lg border border-slate-850"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                <FolderSync className="w-5 h-5 text-blue-400" /> Transfer Employee
+              </h3>
+              <p className="text-xs text-slate-400">
+                Select target department to route employee **{selectedEmployee.name}** and immediately revoke access to previous resources.
+              </p>
+
+              {transferError && (
+                <div className="p-3 bg-rose-950/30 border border-rose-900/50 text-rose-400 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
+                  <ShieldAlert className="w-4 h-4" /> {transferError}
+                </div>
+              )}
+
+              <form onSubmit={handleTransferEmployee} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Department</label>
+                  <select
+                    required
+                    value={transferTargetDeptId}
+                    onChange={(e) => setTransferTargetDeptId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 text-xs font-semibold"
+                  >
+                    <option value="">Select Department...</option>
                     {departments.map((d) => (
                       <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
                   </select>
                 </div>
-              </div>
-              <button
-                id="provision-admin-btn"
-                type="submit"
-                disabled={provisioningAdmin}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-500/10 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 mt-2"
-              >
-                <UserPlus className="w-4 h-4" />
-                {provisioningAdmin ? 'Provisioning...' : 'Provision Admin'}
-              </button>
-            </form>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTransferModalOpen(false);
+                      setSelectedEmployee(null);
+                    }}
+                    className="px-4 py-2 bg-slate-950 border border-slate-850 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-bold transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/10"
+                  >
+                    Transfer
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* SLA Violations Panel */}
+      <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-rose-400" />
+            <h2 className="font-extrabold text-lg text-slate-200">SLA Violations Monitor</h2>
+          </div>
+          <span className="text-xs text-slate-500 font-semibold">{slaViolations.length} violation(s)</span>
+        </div>
+
+        {loadingSla ? (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-500 gap-2">
+            <Loader className="w-5 h-5 animate-spin text-blue-500" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Checking SLA Status...</span>
+          </div>
+        ) : slaViolations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-600 border border-dashed border-slate-800 rounded-xl">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
+            <p className="text-xs font-bold text-emerald-400">All Clear</p>
+            <p className="text-[10px] text-slate-600 mt-1">No SLA violations detected. All proof deadlines met.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto border border-slate-850 rounded-xl">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-850 bg-rose-950/10 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                  <th className="py-2.5 px-3">Ticket ID</th>
+                  <th className="py-2.5 px-3">Subject</th>
+                  <th className="py-2.5 px-3">Department</th>
+                  <th className="py-2.5 px-3">Proof Requested</th>
+                  <th className="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-855/60 text-xs">
+                {slaViolations.map((v) => (
+                  <tr key={v.id} className="hover:bg-rose-950/10 transition-colors">
+                    <td className="py-3 px-3 font-mono text-[10px] text-rose-400 font-bold">#T-{v.id}</td>
+                    <td className="py-3 px-3 text-slate-200 font-semibold">{v.title}</td>
+                    <td className="py-3 px-3 text-slate-400 font-semibold">{v.department_name || 'Unknown'}</td>
+                    <td className="py-3 px-3 text-slate-500 text-[10px]">
+                      {v.proof_requested_at ? new Date(v.proof_requested_at).toLocaleString() : 'N/A'}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => handleSendExplanationNotice(v.id)}
+                        className="px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/40 border border-rose-900/30 text-rose-400 hover:text-rose-300 rounded-lg text-[10px] font-bold tracking-wide transition-all cursor-pointer inline-flex items-center gap-1"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        Send Explanation Notice
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {/* Global tickets table */}
