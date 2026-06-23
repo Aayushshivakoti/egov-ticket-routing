@@ -35,6 +35,26 @@ Built with **Python (FastAPI, Celery)** on the backend and **React.js (Vite, Tai
 
 ---
 
+## 🧠 Algorithms Used
+
+1. **TF-IDF (Term Frequency-Inverse Document Frequency) & Logistic Regression**:
+   - **Use Case**: Primary classification model for predicting the appropriate department based on the citizen's grievance text.
+   - **How It Works**: Converts raw text into a numerical format, giving higher importance to unique and domain-specific words. Logistic Regression computes probability scores (confidence) for each possible department.
+
+2. **NLP Keyword Extraction (Explainable AI)**:
+   - **Use Case**: Extracts the top 3 highest-weighted keywords causing the model to make its routing decision, making the AI "explainable" to users.
+   - **How It Works**: Multiplies the active TF-IDF weights by the Logistic Regression coefficients to determine which words/characters contributed most significantly to the final prediction.
+
+3. **SHA-256 (Secure Hash Algorithm 256-bit)**:
+   - **Use Case**: Cryptographic Hash Chaining for the system audit trail.
+   - **How It Works**: Each audit log entry generates a cryptographic hash combining its current payload with the exact hash of the preceding database row. This creates an immutable blockchain-like ledger that detects tampering instantly.
+
+4. **Deterministic Heuristics (Fallback Routing)**:
+   - **Use Case**: Failsafe mechanism for emergency keywords or if the ML model is unavailable/uncertain.
+   - **How It Works**: Uses hardcoded dictionaries of English and Nepali emergency keywords (e.g., "flood", "बाढी", "short circuit") to bypass the AI and immediately assign a priority ticket to the relevant department with 100% confidence.
+
+---
+
 ## 📂 Directory Architecture
 
 ```
