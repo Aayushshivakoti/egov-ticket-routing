@@ -511,7 +511,8 @@ def submit_ticket_feedback(
     ticket_id: int,
     satisfied: bool = Form(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    background_tasks: BackgroundTasks = None
 ):
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     if not ticket:
@@ -525,10 +526,41 @@ def submit_ticket_feedback(
         
     ticket.citizen_satisfied = satisfied
     
-    if not satisfied:
+    super_admins = db.query(User).filter(User.role == "super_admin", User.status == "active").all()
+    dept_admins = db.query(User).filter(User.role == "dept_admin", User.department_id == ticket.assigned_department_id, User.status == "active").all() if ticket.assigned_department_id else []
+    notify_users = super_admins + dept_admins
+
+    if satisfied:
+        # Notify admins that user is satisfied
+        for u in notify_users:
+            notification = Notification(
+                user_id=u.id,
+                ticket_id=ticket.id,
+                category="system",
+                message=f"Citizen confirmed resolution for Ticket #{ticket.id}."
+            )
+            db.add(notification)
+    else:
         ticket.status = "Under Re-evaluation"
         ticket.reopened = True
         
+        # Notify admins that user reopened
+        for u in notify_users:
+            notification = Notification(
+                user_id=u.id,
+                ticket_id=ticket.id,
+                category="sla_alert",
+                message=f"Action Required: Citizen was NOT satisfied and reopened Ticket #{ticket.id}. Status changed to Under Re-evaluation."
+            )
+            db.add(notification)
+            if background_tasks:
+                background_tasks.add_task(
+                    send_mock_email,
+                    u.email,
+                    f"Ticket #{ticket.id} Reopened by Citizen",
+                    f"Hello {u.name},\n\nTicket #{ticket.id} ('{ticket.title}') was reopened because the citizen was not satisfied with the resolution.\n\nPlease review and request clarification if needed."
+                )
+
         # Audit Logging
         log_audit_event(
             db=db,
@@ -544,6 +576,124 @@ def submit_ticket_feedback(
     db.commit()
     db.refresh(ticket)
     return attach_telemetry_fields(ticket, db)
+
+def save_clarification_files(clarification_id: int, ticket_id: int, files: Optional[List[UploadFile]], db: Session):
+    if not files:
+        return
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    uploads_dir = os.path.join(script_dir, "..", "uploads", "clarifications")
+    os.makedirs(uploads_dir, exist_ok=True)
+    
+    for file in files:
+        if not file.filename:
+            continue
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext in ALLOWED_PHOTO_EXTS:
+            file_type = "photo"
+        elif ext in ALLOWED_VIDEO_EXTS:
+            file_type = "video"
+        elif ext in ALLOWED_AUDIO_EXTS:
+            file_type = "audio"
+        elif ext in ALLOWED_DOC_EXTS:
+            file_type = "document"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file type: {file.filename}."
+            )
+        filename = f"{uuid.uuid4()}{ext}"
+        file_path = os.path.join(uploads_dir, filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        relative_path = f"/uploads/clarifications/{filename}"
+        attachment = TicketAttachment(
+            ticket_id=ticket_id,
+            clarification_id=clarification_id,
+            file_path=relative_path,
+            file_type=file_type,
+            is_proof=False
+        )
+        db.add(attachment)
+    db.commit()
+
+from app.models import TicketClarification
+
+@router.get("/{ticket_id}/clarifications")
+def get_ticket_clarifications(ticket_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+        
+    clarifications = db.query(TicketClarification).filter(TicketClarification.ticket_id == ticket_id).order_by(TicketClarification.created_at.asc()).all()
+    
+    result = []
+    for c in clarifications:
+        attachments = db.query(TicketAttachment).filter(TicketAttachment.clarification_id == c.id).all()
+        result.append({
+            "id": c.id,
+            "ticket_id": c.ticket_id,
+            "sender_id": c.sender_id,
+            "message": c.message,
+            "created_at": c.created_at,
+            "sender": {"id": c.sender.id, "name": c.sender.name, "role": c.sender.role} if c.sender else None,
+            "attachments": [{"id": a.id, "file_path": a.file_path, "file_type": a.file_type} for a in attachments]
+        })
+    return result
+
+@router.post("/{ticket_id}/clarifications")
+def post_ticket_clarification(
+    ticket_id: int,
+    message: str = Form(...),
+    files: Optional[List[UploadFile]] = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    background_tasks: BackgroundTasks = None
+):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+        
+    clarification = TicketClarification(
+        ticket_id=ticket.id,
+        sender_id=current_user.id,
+        message=message
+    )
+    db.add(clarification)
+    db.commit()
+    db.refresh(clarification)
+    
+    if files:
+        save_clarification_files(clarification.id, ticket.id, files, db)
+        
+    # Notifications
+    if current_user.role == "citizen":
+        # Notify admins
+        admins = db.query(User).filter(
+            User.role.in_(["super_admin", "dept_admin"]),
+            User.status == "active"
+        ).all()
+        for u in admins:
+            if u.role == "dept_admin" and u.department_id != ticket.assigned_department_id:
+                continue
+            notif = Notification(user_id=u.id, ticket_id=ticket.id, category="system", message=f"Citizen replied to clarification on Ticket #{ticket.id}")
+            db.add(notif)
+    else:
+        # Notify citizen
+        notif = Notification(user_id=ticket.citizen_id, ticket_id=ticket.id, category="system", message=f"Admin requested clarification on Ticket #{ticket.id}")
+        db.add(notif)
+        if background_tasks:
+            citizen = db.query(User).filter(User.id == ticket.citizen_id).first()
+            if citizen:
+                background_tasks.add_task(
+                    send_mock_email,
+                    citizen.email,
+                    f"Clarification Requested - Ticket #{ticket.id}",
+                    f"Hello {citizen.name},\n\nAn administrator has requested clarification on your reopened ticket #{ticket.id}.\n\nMessage: {message}\n\nPlease log in to respond."
+                )
+    
+    db.commit()
+    return {"status": "success", "clarification_id": clarification.id}
+
 
 @router.get("/public/stats")
 def get_public_stats(db: Session = Depends(get_db)):

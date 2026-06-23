@@ -88,6 +88,15 @@ class TicketAttachmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TicketClarificationResponse(BaseConfigModel):
+    id: int
+    ticket_id: int
+    sender_id: int
+    message: str
+    created_at: datetime
+    attachments: List[TicketAttachmentResponse] = []
+    sender: Optional[UserResponse] = None
+
 class TicketResponse(TicketBase, BaseConfigModel):
     id: int
     citizen_id: int
@@ -104,10 +113,12 @@ class TicketResponse(TicketBase, BaseConfigModel):
     reasoning_keywords: Optional[List[str]] = None
     classification_latency: Optional[float] = None
     attachments: List[TicketAttachmentResponse] = []
+    clarifications: List[TicketClarificationResponse] = []
     proof_requested_at: Optional[datetime] = None
     sla_violated: bool = False
     citizen_satisfied: Optional[bool] = None
     reopened: bool = False
+
     
     # Extra relationship information if needed
     citizen: Optional[UserResponse] = None

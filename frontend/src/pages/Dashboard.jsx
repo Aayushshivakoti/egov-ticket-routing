@@ -307,8 +307,11 @@ const Dashboard = () => {
               <ReportTableView 
                 statusFilter={status}
                 tickets={tickets}
+                departments={departments}
                 getPriorityBadge={getPriorityBadge}
                 getStatusBadge={getStatusBadge}
+                getDepartmentName={getDepartmentName}
+                onRefresh={fetchData}
               />
             ) : (
               renderDashboardByRole()

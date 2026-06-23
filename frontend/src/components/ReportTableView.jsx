@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { Inbox, Cpu, Eye, X, ArrowLeft } from 'lucide-react';
 import api from '../services/api';
 
-const ReportTableView = ({ statusFilter, tickets, getPriorityBadge, getStatusBadge }) => {
+const ReportTableView = ({ statusFilter, tickets, departments = [], getPriorityBadge, getStatusBadge, getDepartmentName, onRefresh }) => {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -15,6 +15,33 @@ const ReportTableView = ({ statusFilter, tickets, getPriorityBadge, getStatusBad
   const handleCloseModal = () => {
     setModalOpen(false);
     setSelectedTicket(null);
+  };
+
+  const handleDepartmentOverride = async (ticketId, newDeptId) => {
+    if (!newDeptId) return;
+    try {
+      await api.patch(`/tickets/${ticketId}`, {
+        assigned_department_id: parseInt(newDeptId),
+        ai_confidence: 1.0
+      });
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to override department assignment");
+    }
+  };
+
+  const handleStatusOverride = async (ticketId, newStatus) => {
+    if (!newStatus) return;
+    try {
+      await api.patch(`/tickets/${ticketId}`, {
+        status: newStatus
+      });
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update status");
+    }
   };
 
   const getTableTitle = () => {
@@ -58,8 +85,8 @@ const ReportTableView = ({ statusFilter, tickets, getPriorityBadge, getStatusBad
                   <th className="py-4 px-4 w-16">ID</th>
                   <th className="py-4 px-4">Subject</th>
                   <th className="py-4 px-4">Priority</th>
-                  <th className="py-4 px-4">AI Score</th>
-                  <th className="py-4 px-4">Status</th>
+                  <th className="py-4 px-4 w-48">Routing Info & Override</th>
+                  <th className="py-4 px-4 w-48">Status & Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-sm">
@@ -71,10 +98,40 @@ const ReportTableView = ({ statusFilter, tickets, getPriorityBadge, getStatusBad
                       <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{ticket.description}</p>
                     </td>
                     <td className="py-4 px-4">{getPriorityBadge(ticket.priority)}</td>
-                    <td className="py-4 px-4 font-mono text-xs text-emerald-400">
-                      {ticket.ai_confidence !== null ? `${(ticket.ai_confidence * 100).toFixed(0)}%` : 'Manual'}
+                    <td className="py-4 px-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <Cpu className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">
+                            AI Score: {ticket.ai_confidence !== null ? `${(ticket.ai_confidence * 100).toFixed(0)}%` : 'Manual'}
+                          </span>
+                        </div>
+                        <select
+                          className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-300 focus:outline-none focus:border-blue-500 transition-colors"
+                          value={ticket.assigned_department_id || ''}
+                          onChange={(e) => handleDepartmentOverride(ticket.id, e.target.value)}
+                        >
+                          <option value="">-- AI Routing --</option>
+                          {departments.map(d => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
-                    <td className="py-4 px-4">{getStatusBadge(ticket.status)}</td>
+                    <td className="py-4 px-4">
+                      <div className="space-y-2 flex flex-col items-start">
+                        {getStatusBadge(ticket.status)}
+                        <select
+                          className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-300 focus:outline-none focus:border-blue-500 transition-colors mt-2"
+                          value={ticket.status}
+                          onChange={(e) => handleStatusOverride(ticket.id, e.target.value)}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="resolved">Resolved</option>
+                        </select>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

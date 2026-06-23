@@ -3,12 +3,14 @@ import api from '../services/api';
 import { Chart, registerables } from 'chart.js';
 import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send, FileSearch, Bell } from 'lucide-react';
 import ProofRequestsView from './ProofRequestsView';
+import ClarificationModal from './ClarificationModal';
 
 Chart.register(...registerables);
 
 const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, getStatusBadge, getDepartmentName }) => {
   const [telemetry, setTelemetry] = useState(null);
   const [loadingTelemetry, setLoadingTelemetry] = useState(true);
+  const [selectedClarificationTicket, setSelectedClarificationTicket] = useState(null);
 
   // Department creation form state
   const [deptName, setDeptName] = useState('');
@@ -1239,106 +1241,55 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
         )}
       </section>
 
-      {/* Global tickets table */}
-      <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl">
-        <div className="flex items-center justify-between mb-6">
+
+      {/* Reopened Cases Panel */}
+      <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 mt-6">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Inbox className="w-5 h-5 text-blue-400" />
-            <h2 className="font-extrabold text-lg text-slate-200" id="supervisor-table-title">System-Wide Grievance Logs</h2>
+            <AlertTriangle className="w-5 h-5 text-amber-400" />
+            <h2 className="font-extrabold text-lg text-slate-200">Reopened Cases (Clarification Required)</h2>
           </div>
-          <span className="text-xs text-slate-500 font-semibold">{tickets.length} records</span>
+          <span className="text-xs text-slate-500 font-semibold">{tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).length} case(s)</span>
         </div>
 
-        {tickets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-600 gap-4 border border-dashed border-slate-800 rounded-xl">
-            <p className="text-sm font-bold text-slate-400">No tickets found</p>
-            <p className="text-xs text-slate-600">The central database contains no public grievances at this time.</p>
+        {tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-600 border border-dashed border-slate-800 rounded-xl">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
+            <p className="text-xs font-bold text-emerald-400">All Clear</p>
+            <p className="text-[10px] text-slate-600 mt-1">No reopened cases currently require attention.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse" aria-labelledby="supervisor-table-title">
-              <thead>
-                <tr className="border-b border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-950/20">
-                  <th className="py-4 px-4 w-16">ID</th>
-                  <th className="py-4 px-4">Subject</th>
-                  <th className="py-4 px-4">Priority</th>
-                  <th className="py-4 px-4">Routing Info & Override</th>
-                  <th className="py-4 px-4">Status & Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 text-sm">
-                {tickets.map((ticket) => (
-                  <tr key={ticket.id} className="hover:bg-slate-900/60 transition-colors supervisor-ticket-row">
-                    <td className="py-4 px-4 font-mono font-bold text-xs text-slate-400">
-                      #T-{ticket.id}
-                    </td>
-                    <td className="py-4 px-4 max-w-xs">
-                      <p className="font-bold text-slate-200">{ticket.title}</p>
-                      <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{ticket.description}</p>
-                      {ticket.reasoning_keywords && ticket.reasoning_keywords.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1.5 items-center">
-                          <span className="text-[9px] text-purple-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                            <Cpu className="w-3.5 h-3.5 text-purple-400" /> AI Reasoning:
-                          </span>
-                          {ticket.reasoning_keywords.map((k) => (
-                            <span key={k} className="px-1.5 py-0.5 bg-purple-950/40 text-purple-400 border border-purple-900/30 rounded text-[9px] font-mono font-bold">
-                              {k}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {ticket.remarks && (
-                        <p className="text-[10px] text-emerald-400 bg-emerald-950/20 border border-emerald-900/30 p-1.5 rounded-lg mt-1.5 font-medium leading-normal">
-                          Remarks: {ticket.remarks}
-                        </p>
-                      )}
-                    </td>
-                    <td className="py-4 px-4">
-                      {getPriorityBadge(ticket.priority)}
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex flex-col gap-1.5">
-                        <select
-                          id={`dept-override-${ticket.id}`}
-                          value={ticket.assigned_department_id || ''}
-                          onChange={(e) => handleDepartmentOverride(ticket.id, e.target.value)}
-                          className="px-2.5 py-1 bg-slate-950 border border-slate-850 hover:border-slate-700 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-blue-500 transition-all font-semibold"
-                        >
-                          <option value="">Unassigned</option>
-                          {departments.map(d => (
-                            <option key={d.id} value={d.id}>{d.name}</option>
-                          ))}
-                        </select>
-                        {ticket.ai_confidence !== null && (
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                            <Cpu className="w-3.5 h-3.5 text-emerald-500" />
-                            AI Confidence: {(ticket.ai_confidence * 100).toFixed(0)}%
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-2">
-                        {getStatusBadge(ticket.status)}
-                        <select
-                          id={`status-override-${ticket.id}`}
-                          value={ticket.status}
-                          onChange={(e) => handleStatusOverride(ticket.id, e.target.value)}
-                          className="px-2.5 py-1 bg-slate-950 border border-slate-850 hover:border-slate-700 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-blue-500 transition-all font-semibold"
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="resolved">Resolved</option>
-                        </select>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-4">
+            {tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).map((t) => (
+              <div key={t.id} className="border border-slate-800 bg-slate-950 rounded-xl p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest block mb-1">Ticket #T-{t.id}</span>
+                    <h3 className="font-bold text-sm text-slate-200">{t.title}</h3>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedClarificationTicket(t)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all"
+                  >
+                    View & Respond
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 line-clamp-2">{t.description}</p>
+              </div>
+            ))}
           </div>
         )}
-      </div>
+      </section>
+
+      {selectedClarificationTicket && (
+        <ClarificationModal
+          ticket={selectedClarificationTicket}
+          onClose={() => setSelectedClarificationTicket(null)}
+          onRefresh={onRefresh}
+          currentUserRole="super_admin"
+        />
+      )}
+
     </div>
   );
 };

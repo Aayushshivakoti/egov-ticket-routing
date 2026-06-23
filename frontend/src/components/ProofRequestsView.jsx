@@ -41,9 +41,7 @@ const ProofRequestsView = () => {
 
     try {
       setUploadError('');
-      await api.post(`/tickets/proof-requests/${uploadingReqId}/fulfill`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      await api.post(`/tickets/proof-requests/${uploadingReqId}/fulfill`, formData);
       fetchProofRequests();
     } catch (err) {
       console.error(err);

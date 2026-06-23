@@ -3,10 +3,12 @@ import api from '../services/api';
 import { Inbox, Eye, Cpu, X, FileText, CheckCircle2, Loader, UserPlus, Bell, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ProofRequestsView from './ProofRequestsView';
+import ClarificationModal from './ClarificationModal';
 
 const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBadge, getDepartmentName, statusFilter }) => {
   const { user } = useAuth();
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [selectedClarificationTicket, setSelectedClarificationTicket] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [statusVal, setStatusVal] = useState('pending');
   const [remarksVal, setRemarksVal] = useState('');
@@ -109,11 +111,7 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
         });
       }
 
-      await api.put(`/tickets/${selectedTicket.id}/status`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
+      await api.put(`/tickets/${selectedTicket.id}/status`, formData);
       
       handleCloseModal();
       onRefresh();
@@ -610,10 +608,58 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
           )}
         </div>
       )}
+      {/* Reopened Cases Panel */}
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-400" />
+            <h2 className="font-extrabold text-lg text-slate-200">Reopened Cases (Clarification Required)</h2>
+          </div>
+          <span className="text-xs text-slate-500 font-semibold">{tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).length} case(s)</span>
+        </div>
+
+        {tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-600 border border-dashed border-slate-800 rounded-xl">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
+            <p className="text-xs font-bold text-emerald-400">All Clear</p>
+            <p className="text-[10px] text-slate-600 mt-1">No reopened cases currently require attention.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).map((t) => (
+              <div key={t.id} className="border border-slate-800 bg-slate-950 rounded-xl p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest block mb-1">Ticket #T-{t.id}</span>
+                    <h3 className="font-bold text-sm text-slate-200">{t.title}</h3>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedClarificationTicket(t)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all"
+                  >
+                    View & Respond
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 line-clamp-2">{t.description}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Citizen Proof Requests Tracking */}
       <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-6">
         <ProofRequestsView />
       </section>
+
+      {selectedClarificationTicket && (
+        <ClarificationModal
+          ticket={selectedClarificationTicket}
+          onClose={() => setSelectedClarificationTicket(null)}
+          onRefresh={onRefresh}
+          currentUserRole="dept_admin"
+        />
+      )}
     </div>
   );
 };

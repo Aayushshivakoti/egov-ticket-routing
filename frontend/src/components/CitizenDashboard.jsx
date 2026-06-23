@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { PlusCircle, Inbox, Cpu, Loader, AlertTriangle, CheckCircle2, UploadCloud, Mic, Trash2, Video, Music, Image, Paperclip } from 'lucide-react';
+import { PlusCircle, Inbox, Cpu, Loader, AlertTriangle, CheckCircle2, UploadCloud, Mic, Trash2, Video, Music, Image, Paperclip, Eye, MessageSquare } from 'lucide-react';
 import LocationPicker from './LocationPicker';
+import ClarificationModal from './ClarificationModal';
 
 const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, getStatusBadge, getDepartmentName }) => {
+  const [selectedClarificationTicket, setSelectedClarificationTicket] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
@@ -149,11 +151,7 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
         formData.append('files', att.file);
       });
 
-      const response = await api.post('/tickets/create', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
+      const response = await api.post('/tickets/create', formData);
 
       const newTicket = response.data;
       setTitle('');
@@ -528,9 +526,17 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
                           </div>
                         )}
                         {ticket.reopened && ticket.status !== 'resolved' && (
-                          <div className="mt-2 text-[9px] font-bold text-rose-500 uppercase tracking-widest inline-flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
-                            Re-opened by Citizen
+                          <div className="mt-2 text-[9px] font-bold text-rose-500 uppercase tracking-widest flex flex-col gap-2">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
+                              Re-opened by Citizen
+                            </span>
+                            <button
+                              onClick={() => setSelectedClarificationTicket(ticket)}
+                              className="px-3 py-1.5 bg-blue-900/40 hover:bg-blue-800/60 border border-blue-900/50 text-blue-400 rounded-lg text-[10px] font-bold transition-all w-fit"
+                            >
+                              View / Reply Clarifications
+                            </button>
                           </div>
                         )}
                       </td>
@@ -542,6 +548,15 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
           )}
         </div>
       </div>
+      
+      {selectedClarificationTicket && (
+        <ClarificationModal
+          ticket={selectedClarificationTicket}
+          onClose={() => setSelectedClarificationTicket(null)}
+          onRefresh={onRefresh}
+          currentUserRole="citizen"
+        />
+      )}
     </div>
   );
 };
