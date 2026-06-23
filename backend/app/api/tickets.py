@@ -113,6 +113,8 @@ def create_ticket(
     title: str = Form(...),
     description: str = Form(...),
     priority: str = Form("medium"),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -132,7 +134,9 @@ def create_ticket(
         ai_confidence=0.0,
         priority=priority,
         status="processing",
-        needs_verification=False
+        needs_verification=False,
+        latitude=latitude,
+        longitude=longitude
     )
     db.add(new_ticket)
     db.commit()
@@ -161,6 +165,8 @@ def create_ticket_explicit(
     title: str = Form(...),
     description: str = Form(...),
     priority: str = Form("medium"),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -180,7 +186,9 @@ def create_ticket_explicit(
         ai_confidence=0.0,
         priority=priority,
         status="processing",
-        needs_verification=False
+        needs_verification=False,
+        latitude=latitude,
+        longitude=longitude
     )
     db.add(new_ticket)
     db.commit()
