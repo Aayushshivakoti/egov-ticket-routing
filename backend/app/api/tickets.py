@@ -1171,3 +1171,38 @@ def mark_notification_read(
     notif.is_read = True
     db.commit()
     return {"detail": "Notification marked as read"}
+
+ 
+ @ r o u t e r . d e l e t e ( " / { t i c k e t _ i d } " ) 
+ d e f   d e l e t e _ t i c k e t ( 
+         t i c k e t _ i d :   i n t , 
+         d b :   S e s s i o n   =   D e p e n d s ( g e t _ d b ) , 
+         c u r r e n t _ u s e r :   U s e r   =   D e p e n d s ( g e t _ c u r r e n t _ u s e r ) 
+ ) : 
+         " " " D e l e t e   a   t i c k e t   ( S u p e r   A d m i n   a n d   D e p t   A d m i n   o n l y ) . " " " 
+         i f   c u r r e n t _ u s e r . r o l e   n o t   i n   [ " s u p e r _ a d m i n " ,   " d e p t _ a d m i n " ] : 
+                 r a i s e   H T T P E x c e p t i o n ( s t a t u s _ c o d e = 4 0 3 ,   d e t a i l = " N o t   a u t h o r i z e d   t o   d e l e t e   t i c k e t s " ) 
+                 
+         t i c k e t   =   d b . q u e r y ( T i c k e t ) . f i l t e r ( T i c k e t . i d   = =   t i c k e t _ i d ) . f i r s t ( ) 
+         i f   n o t   t i c k e t : 
+                 r a i s e   H T T P E x c e p t i o n ( s t a t u s _ c o d e = 4 0 4 ,   d e t a i l = " T i c k e t   n o t   f o u n d " ) 
+                 
+         i f   c u r r e n t _ u s e r . r o l e   = =   " d e p t _ a d m i n "   a n d   t i c k e t . a s s i g n e d _ d e p a r t m e n t _ i d   ! =   c u r r e n t _ u s e r . d e p a r t m e n t _ i d : 
+                 r a i s e   H T T P E x c e p t i o n ( s t a t u s _ c o d e = 4 0 3 ,   d e t a i l = " N o t   a u t h o r i z e d   t o   d e l e t e   t i c k e t s   f o r   o t h e r   d e p a r t m e n t s " ) 
+                 
+         #   A u d i t   L o g g i n g 
+         l o g _ a u d i t _ e v e n t ( 
+                 d b = d b , 
+                 u s e r _ i d = c u r r e n t _ u s e r . i d , 
+                 a c t i o n = " T I C K E T _ D E L E T E D " , 
+                 p a y l o a d _ d i c t = { 
+                         " t i c k e t _ i d " :   t i c k e t . i d , 
+                         " t i t l e " :   t i c k e t . t i t l e 
+                 } 
+         ) 
+         
+         d b . d e l e t e ( t i c k e t ) 
+         d b . c o m m i t ( ) 
+         r e t u r n   { " d e t a i l " :   " T i c k e t   d e l e t e d   s u c c e s s f u l l y " } 
+  
+ 

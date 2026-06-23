@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Inbox, Cpu, Eye, X, ArrowLeft } from 'lucide-react';
+import { Inbox, Cpu, Eye, X, ArrowLeft, Trash2 } from 'lucide-react';
 import api from '../services/api';
 
 const ReportTableView = ({ statusFilter, tickets, departments = [], getPriorityBadge, getStatusBadge, getDepartmentName, onRefresh }) => {
@@ -41,6 +41,17 @@ const ReportTableView = ({ statusFilter, tickets, departments = [], getPriorityB
     } catch (err) {
       console.error(err);
       alert("Failed to update status");
+    }
+  };
+
+  const handleDeleteTicket = async (ticketId) => {
+    if (!window.confirm(`Are you sure you want to permanently delete Ticket #T-${ticketId}?`)) return;
+    try {
+      await api.delete(`/tickets/${ticketId}`);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete ticket: " + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -90,7 +101,7 @@ const ReportTableView = ({ statusFilter, tickets, departments = [], getPriorityB
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-sm">
-                {tickets.map((ticket) => (
+                {tickets.filter(t => t.status !== 'Under Re-evaluation').map((ticket) => (
                   <tr key={ticket.id} className="hover:bg-slate-900/60 transition-colors">
                     <td className="py-4 px-4 font-mono font-bold text-xs text-slate-400">#T-{ticket.id}</td>
                     <td className="py-4 px-4 max-w-xs">
@@ -119,8 +130,17 @@ const ReportTableView = ({ statusFilter, tickets, departments = [], getPriorityB
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <div className="space-y-2 flex flex-col items-start">
-                        {getStatusBadge(ticket.status)}
+                      <div className="space-y-2 flex flex-col items-start w-full">
+                        <div className="flex w-full items-center justify-between">
+                          {getStatusBadge(ticket.status)}
+                          <button
+                            onClick={() => handleDeleteTicket(ticket.id)}
+                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors"
+                            title="Delete Ticket"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                         <select
                           className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-300 focus:outline-none focus:border-blue-500 transition-colors mt-2"
                           value={ticket.status}

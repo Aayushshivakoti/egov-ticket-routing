@@ -22,10 +22,11 @@ const Dashboard = () => {
   const calculateStats = (ticketList) => {
     const s = { total: ticketList.length, pending: 0, in_progress: 0, resolved: 0 };
     ticketList.forEach(t => {
-      if (t.status === 'pending') s.pending += 1;
+      if (t.status === 'pending' || t.status === 'processing') s.pending += 1;
       else if (t.status === 'in_progress') s.in_progress += 1;
       else if (t.status === 'resolved') s.resolved += 1;
     });
+    s.total = s.pending + s.in_progress + s.resolved;
     setStats(s);
   };
 

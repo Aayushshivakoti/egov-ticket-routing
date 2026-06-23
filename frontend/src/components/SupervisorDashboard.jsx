@@ -722,24 +722,24 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
                 
                 <circle 
                   cx="20" cy="20" r="15.915" fill="transparent" stroke="#facc15" strokeWidth="4"
-                  strokeDasharray={`${(statusCounts.pending / (tickets.length || 1)) * 100} ${100 - ((statusCounts.pending / (tickets.length || 1)) * 100)}`}
+                  strokeDasharray={`${(statusCounts.pending / (tickets.filter(t => t.status !== 'Under Re-evaluation').length || 1)) * 100} ${100 - ((statusCounts.pending / (tickets.filter(t => t.status !== 'Under Re-evaluation').length || 1)) * 100)}`}
                   strokeDashoffset="0"
                 />
                 
                 <circle 
                   cx="20" cy="20" r="15.915" fill="transparent" stroke="#3b82f6" strokeWidth="4"
-                  strokeDasharray={`${(statusCounts.in_progress / (tickets.length || 1)) * 100} ${100 - ((statusCounts.in_progress / (tickets.length || 1)) * 100)}`}
-                  strokeDashoffset={`-${(statusCounts.pending / (tickets.length || 1)) * 100}`}
+                  strokeDasharray={`${(statusCounts.in_progress / (tickets.filter(t => t.status !== 'Under Re-evaluation').length || 1)) * 100} ${100 - ((statusCounts.in_progress / (tickets.filter(t => t.status !== 'Under Re-evaluation').length || 1)) * 100)}`}
+                  strokeDashoffset={`-${(statusCounts.pending / (tickets.filter(t => t.status !== 'Under Re-evaluation').length || 1)) * 100}`}
                 />
 
                 <circle 
                   cx="20" cy="20" r="15.915" fill="transparent" stroke="#10b981" strokeWidth="4"
-                  strokeDasharray={`${(statusCounts.resolved / (tickets.length || 1)) * 100} ${100 - ((statusCounts.resolved / (tickets.length || 1)) * 100)}`}
-                  strokeDashoffset={`-${((statusCounts.pending + statusCounts.in_progress) / (tickets.length || 1)) * 100}`}
+                  strokeDasharray={`${(statusCounts.resolved / (tickets.filter(t => t.status !== 'Under Re-evaluation').length || 1)) * 100} ${100 - ((statusCounts.resolved / (tickets.filter(t => t.status !== 'Under Re-evaluation').length || 1)) * 100)}`}
+                  strokeDashoffset={`-${((statusCounts.pending + statusCounts.in_progress) / (tickets.filter(t => t.status !== 'Under Re-evaluation').length || 1)) * 100}`}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-black text-slate-100">{tickets.length}</span>
+                <span className="text-xl font-black text-slate-100">{tickets.filter(t => t.status !== 'Under Re-evaluation').length}</span>
                 <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Total</span>
               </div>
             </div>
@@ -1249,10 +1249,10 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
             <AlertTriangle className="w-5 h-5 text-amber-400" />
             <h2 className="font-extrabold text-lg text-slate-200">Reopened Cases (Clarification Required)</h2>
           </div>
-          <span className="text-xs text-slate-500 font-semibold">{tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).length} case(s)</span>
+          <span className="text-xs text-slate-500 font-semibold">{tickets.filter(t => t.status === 'Under Re-evaluation').length} case(s)</span>
         </div>
 
-        {tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).length === 0 ? (
+        {tickets.filter(t => t.status === 'Under Re-evaluation').length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-slate-600 border border-dashed border-slate-800 rounded-xl">
             <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
             <p className="text-xs font-bold text-emerald-400">All Clear</p>
@@ -1260,7 +1260,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
           </div>
         ) : (
           <div className="space-y-4">
-            {tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).map((t) => (
+            {tickets.filter(t => t.status === 'Under Re-evaluation').map((t) => (
               <div key={t.id} className="border border-slate-800 bg-slate-950 rounded-xl p-4">
                 <div className="flex justify-between items-start mb-3">
                   <div>

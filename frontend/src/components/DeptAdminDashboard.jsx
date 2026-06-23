@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Inbox, Eye, Cpu, X, FileText, CheckCircle2, Loader, UserPlus, Bell, AlertTriangle } from 'lucide-react';
+import { Inbox, Eye, Cpu, X, FileText, CheckCircle2, Loader, UserPlus, Bell, AlertTriangle, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ProofRequestsView from './ProofRequestsView';
 import ClarificationModal from './ClarificationModal';
@@ -24,6 +24,17 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
 
   // Notification alerts state
   const [notifications, setNotifications] = useState([]);
+
+  const handleDeleteTicket = async (ticketId) => {
+    if (!window.confirm(`Are you sure you want to permanently delete Ticket #T-${ticketId}?`)) return;
+    try {
+      await api.delete(`/tickets/${ticketId}`);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete ticket: " + (err.response?.data?.detail || err.message));
+    }
+  };
   const [loadingNotifications, setLoadingNotifications] = useState(true);
 
   const fetchDeptEmployees = async () => {
@@ -186,7 +197,7 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-sm">
-                {tickets.map((ticket) => (
+                {tickets.filter(t => t.status !== 'Under Re-evaluation').map((ticket) => (
                   <tr key={ticket.id} className="hover:bg-slate-900/60 transition-colors admin-ticket-row">
                     <td className="py-4 px-4 font-mono font-bold text-xs text-slate-400">
                       #T-{ticket.id}
@@ -217,13 +228,22 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
                       {getStatusBadge(ticket.status)}
                     </td>
                     <td className="py-4 px-4 text-right">
-                      <button
-                        onClick={() => handleOpenModal(ticket)}
-                        className="px-3 py-1.5 bg-slate-950 border border-slate-850 hover:bg-slate-850 text-slate-300 hover:text-slate-100 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all admin-view-btn"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        Resolve Case
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => handleOpenModal(ticket)}
+                          className="px-3 py-1.5 bg-slate-950 border border-slate-850 hover:bg-slate-850 text-slate-300 hover:text-slate-100 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all admin-view-btn"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Resolve Case
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTicket(ticket.id)}
+                          className="px-2 py-1.5 bg-rose-950/20 border border-rose-900/30 hover:bg-rose-900/40 text-rose-400 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+                          title="Delete Ticket"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -615,18 +635,18 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
             <AlertTriangle className="w-5 h-5 text-amber-400" />
             <h2 className="font-extrabold text-lg text-slate-200">Reopened Cases (Clarification Required)</h2>
           </div>
-          <span className="text-xs text-slate-500 font-semibold">{tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).length} case(s)</span>
+          <span className="text-xs text-slate-500 font-semibold">{tickets.filter(t => t.status === 'Under Re-evaluation').length} case(s)</span>
         </div>
 
-        {tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).length === 0 ? (
+        {tickets.filter(t => t.status === 'Under Re-evaluation').length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-slate-600 border border-dashed border-slate-800 rounded-xl">
             <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
             <p className="text-xs font-bold text-emerald-400">All Clear</p>
-            <p className="text-[10px] text-slate-600 mt-1">No reopened cases currently require attention.</p>
+            <p className="text-[10px] text-slate-600 mt-1">No reopened cases requiring clarification.</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {tickets.filter(t => t.status === 'Under Re-evaluation' && t.reopened).map((t) => (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {tickets.filter(t => t.status === 'Under Re-evaluation').map((t) => (
               <div key={t.id} className="border border-slate-800 bg-slate-950 rounded-xl p-4">
                 <div className="flex justify-between items-start mb-3">
                   <div>
