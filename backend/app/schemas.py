@@ -60,6 +60,8 @@ class TicketBase(BaseModel):
     title: str = Field(..., max_length=255)
     description: str
     priority: str = Field("medium", pattern="^(low|medium|high)$")
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 class TicketCreate(TicketBase):
     pass
@@ -104,6 +106,8 @@ class TicketResponse(TicketBase, BaseConfigModel):
     attachments: List[TicketAttachmentResponse] = []
     proof_requested_at: Optional[datetime] = None
     sla_violated: bool = False
+    citizen_satisfied: Optional[bool] = None
+    reopened: bool = False
     
     # Extra relationship information if needed
     citizen: Optional[UserResponse] = None

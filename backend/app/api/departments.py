@@ -236,8 +236,21 @@ def approve_role_change(
         user.dept_role = change.requested_role
     change.status = "Approved"
     db.commit()
+    
+    # Audit Logging
+    from app.utils.audit import log_audit_event
+    log_audit_event(
+        db=db,
+        user_id=admin_user.id,
+        action="ROLE_UPDATE_APPROVAL",
+        payload_dict={
+            "pending_change_id": change.id,
+            "target_user_id": change.user_id,
+            "new_role": change.requested_role
+        }
+    )
+    
     return {"detail": "Role change approved and applied"}
-
 @router.post("/role-changes/{change_id}/reject")
 def reject_role_change(
     change_id: int,

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api import auth, departments, tickets, telemetry
+from app.api import auth, departments, tickets, telemetry, audit
 from app.websocket_manager import manager, redis_listener
 
 @asynccontextmanager
@@ -47,6 +47,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(departments.router, prefix="/api")
 app.include_router(tickets.router, prefix="/api")
 app.include_router(telemetry.router, prefix="/api")
+app.include_router(audit.router, prefix="/api")
 
 @app.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket):

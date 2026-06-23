@@ -1,22 +1,27 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
 import uuid
 import shutil
 import datetime
+import io
+import csv
 from app.db import get_db
-from app.models import Ticket, Department, User, TicketAttachment, Notification
+from app.models import Ticket, Department, User, TicketAttachment, Notification, ProofRequest
 from app.schemas import TicketResponse, TicketUpdate, TicketStatusUpdate, TicketAssignRequest
 from app.api.auth_utils import get_current_user
 from app.classifier import get_reasoning_keywords
 from app.email_utils import send_mock_email
+from app.utils.audit import log_audit_event
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
 
 ALLOWED_PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 ALLOWED_VIDEO_EXTS = {".mp4", ".mov"}
 ALLOWED_AUDIO_EXTS = {".mp3", ".wav", ".m4a"}
+ALLOWED_DOC_EXTS = {".txt", ".pdf", ".doc", ".docx"}
 
 def save_uploaded_files(ticket_id: int, files: Optional[List[UploadFile]], db: Session):
     if not files:
@@ -35,10 +40,12 @@ def save_uploaded_files(ticket_id: int, files: Optional[List[UploadFile]], db: S
             file_type = "video"
         elif ext in ALLOWED_AUDIO_EXTS:
             file_type = "audio"
+        elif ext in ALLOWED_DOC_EXTS:
+            file_type = "document"
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type: {file.filename}. Only images, videos (mp4/mov), and audios (mp3/wav/m4a) are allowed."
+                detail=f"Unsupported file type: {file.filename}. Only images, videos, audios, and documents (txt/pdf/doc) are allowed."
             )
         filename = f"{uuid.uuid4()}{ext}"
         file_path = os.path.join(uploads_dir, filename)
@@ -70,10 +77,12 @@ def save_proof_files(ticket_id: int, files: Optional[List[UploadFile]], db: Sess
             file_type = "video"
         elif ext in ALLOWED_AUDIO_EXTS:
             file_type = "audio"
+        elif ext in ALLOWED_DOC_EXTS:
+            file_type = "document"
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type: {file.filename}. Only images, videos (mp4/mov), and audios (mp3/wav/m4a) are allowed."
+                detail=f"Unsupported file type: {file.filename}. Only images, videos, audios, and documents (txt/pdf/doc) are allowed."
             )
         filename = f"{uuid.uuid4()}{ext}"
         file_path = os.path.join(proof_dir, filename)
@@ -195,19 +204,76 @@ def create_ticket_explicit(
     
     return attach_telemetry_fields(new_ticket, db)
 
-@router.get("/", response_model=List[TicketResponse])
-def get_tickets(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    if current_user.role == "super_admin":
-        res = db.query(Ticket).all()
+@router.get("/proof-requests")
+def get_proof_requests(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from app.models import ProofRequest
+    
+    query = db.query(ProofRequest)
+    if current_user.role == "citizen":
+        query = query.filter(ProofRequest.citizen_id == current_user.id)
     elif current_user.role == "dept_admin":
         if not current_user.department_id:
             return []
-        res = db.query(Ticket).filter(Ticket.assigned_department_id == current_user.department_id).all()
+        query = query.join(Ticket, ProofRequest.ticket_id == Ticket.id).filter(Ticket.assigned_department_id == current_user.department_id)
+        
+    requests = query.all()
+    result = []
+    for r in requests:
+        result.append({
+            "id": r.id,
+            "ticket_id": r.ticket_id,
+            "status": r.status,
+            "created_at": r.created_at,
+            "citizen_name": r.citizen.name if r.citizen else "Unknown",
+            "citizen_email": r.citizen.email if r.citizen else "Unknown",
+            "ticket_title": r.ticket.title if r.ticket else "Unknown"
+        })
+    return result
+
+@router.post("/proof-requests/{req_id}/fulfill")
+def fulfill_proof_request(
+    req_id: int,
+    files: Optional[List[UploadFile]] = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.models import ProofRequest
+    proof_req = db.query(ProofRequest).filter(ProofRequest.id == req_id).first()
+    if not proof_req:
+        raise HTTPException(status_code=404, detail="Proof request not found")
+    
+    if current_user.role not in ["super_admin", "dept_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to upload proof")
+        
+    proof_req.status = "fulfilled"
+    
+    if files:
+        save_proof_files(proof_req.ticket_id, files, db)
+        
+    db.commit()
+    return {"status": "success", "message": "Proof uploaded successfully"}
+
+@router.get("/", response_model=List[TicketResponse])
+def get_tickets(
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    query = db.query(Ticket)
+    
+    if current_user.role == "super_admin":
+        pass # Can see all
+    elif current_user.role == "dept_admin":
+        if not current_user.department_id:
+            return []
+        query = query.filter(Ticket.assigned_department_id == current_user.department_id)
     else:
-        res = db.query(Ticket).filter(Ticket.citizen_id == current_user.id).all()
+        query = query.filter(Ticket.citizen_id == current_user.id)
+        
+    if status:
+        query = query.filter(Ticket.status == status)
+        
+    res = query.all()
     return attach_telemetry_fields_list(res, db)
 
 @router.get("/{ticket_id}", response_model=TicketResponse)
@@ -304,6 +370,20 @@ def update_ticket(
             
     db.commit()
     db.refresh(ticket)
+
+    # Audit Logging
+    log_audit_event(
+        db=db,
+        user_id=current_user.id,
+        action="TICKET_UPDATE",
+        payload_dict={
+            "ticket_id": ticket.id,
+            "new_status": ticket.status,
+            "new_priority": ticket.priority,
+            "new_department_id": ticket.assigned_department_id
+        }
+    )
+
     return attach_telemetry_fields(ticket, db)
 
 @router.get("/department/{dept_id}", response_model=List[TicketResponse])
@@ -385,6 +465,20 @@ def update_ticket_status_explicit(
     db.commit()
     db.refresh(ticket)
     
+    # Audit Logging
+    log_audit_event(
+        db=db,
+        user_id=current_user.id,
+        action="TICKET_STATUS_EXPLICIT",
+        payload_dict={
+            "ticket_id": ticket.id,
+            "old_status": old_status,
+            "new_status": ticket.status,
+            "remarks": ticket.remarks,
+            "report": ticket.report
+        }
+    )
+    
     # Send email notifications based on status transition
     citizen = db.query(User).filter(User.id == ticket.citizen_id).first()
     if citizen and background_tasks:
@@ -412,6 +506,45 @@ def update_ticket_status_explicit(
             
     return attach_telemetry_fields(ticket, db)
 
+@router.post("/{ticket_id}/feedback", response_model=TicketResponse)
+def submit_ticket_feedback(
+    ticket_id: int,
+    satisfied: bool = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+        
+    if current_user.role != "citizen" or ticket.citizen_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the reporting citizen can submit feedback for this ticket.")
+        
+    if ticket.status != "resolved":
+        raise HTTPException(status_code=400, detail="Feedback can only be submitted for resolved tickets.")
+        
+    ticket.citizen_satisfied = satisfied
+    
+    if not satisfied:
+        ticket.status = "Under Re-evaluation"
+        ticket.reopened = True
+        
+        # Audit Logging
+        log_audit_event(
+            db=db,
+            user_id=current_user.id,
+            action="TICKET_REOPENED_CITIZEN",
+            payload_dict={
+                "ticket_id": ticket.id,
+                "reason": "Citizen not satisfied with resolution",
+                "new_status": ticket.status
+            }
+        )
+        
+    db.commit()
+    db.refresh(ticket)
+    return attach_telemetry_fields(ticket, db)
+
 @router.get("/public/stats")
 def get_public_stats(db: Session = Depends(get_db)):
     total = db.query(Ticket).count()
@@ -424,6 +557,39 @@ def get_public_stats(db: Session = Depends(get_db)):
         "in_progress": in_progress,
         "resolved": resolved
     }
+
+@router.get("/export")
+def export_tickets_csv(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only Super Admins can export data.")
+        
+    tickets = db.query(Ticket).all()
+    
+    # Generate CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['ID', 'Title', 'Status', 'Priority', 'Department ID', 'Created At'])
+    
+    for t in tickets:
+        writer.writerow([
+            t.id,
+            t.title,
+            t.status,
+            t.priority,
+            t.assigned_department_id,
+            t.created_at.isoformat()
+        ])
+        
+    output.seek(0)
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=grievances_export.csv"}
+    )
 
 @router.get("/public/feed")
 def get_public_feed(limit: Optional[int] = 8, db: Session = Depends(get_db)):
@@ -446,7 +612,9 @@ def get_public_feed(limit: Optional[int] = 8, db: Session = Depends(get_db)):
             "sla_violated": t.sla_violated,
             "proof_requested_at": t.proof_requested_at,
             "has_proof": proof_count > 0 or bool(t.report),
-            "report": t.report
+            "report": t.report,
+            "latitude": t.latitude,
+            "longitude": t.longitude
         })
     return feed
 
@@ -495,7 +663,9 @@ def get_public_all_grievances(
             "sla_violated": t.sla_violated,
             "proof_requested_at": t.proof_requested_at,
             "has_proof": proof_count > 0 or bool(t.report),
-            "report": t.report
+            "report": t.report,
+            "latitude": t.latitude,
+            "longitude": t.longitude
         })
     return {
         "tickets": feed,
@@ -557,6 +727,17 @@ def request_proof(
     
     # 1. Update proof_requested_at timestamp
     ticket.proof_requested_at = datetime.datetime.utcnow()
+    
+    # 1b. Create ProofRequest record
+    existing_pr = db.query(ProofRequest).filter(ProofRequest.ticket_id == ticket_id).first()
+    if not existing_pr:
+        new_pr = ProofRequest(
+            ticket_id=ticket.id,
+            citizen_id=ticket.citizen_id,
+            status="pending"
+        )
+        db.add(new_pr)
+
     db.commit()
     db.refresh(ticket)
     
@@ -613,6 +794,35 @@ def request_proof(
     db.commit()
     
     return {"detail": "Proof request sent successfully. Department Head and Super Admin have been notified.", "proof_requested_at": ticket.proof_requested_at}
+
+
+@router.get("/proof-requests")
+def get_proof_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role not in ["super_admin", "dept_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to view proof requests")
+    
+    query = db.query(ProofRequest).join(Ticket).order_by(ProofRequest.created_at.desc())
+    
+    if current_user.role == "dept_admin":
+        query = query.filter(Ticket.assigned_department_id == current_user.department_id)
+        
+    prs = query.all()
+    
+    result = []
+    for pr in prs:
+        result.append({
+            "id": pr.id,
+            "ticket_id": pr.ticket_id,
+            "citizen_id": pr.citizen_id,
+            "ticket_title": pr.ticket.title,
+            "citizen_name": pr.citizen.name,
+            "status": pr.status,
+            "created_at": pr.created_at
+        })
+    return result
 
 @router.get("/sla-violations")
 def get_sla_violations(

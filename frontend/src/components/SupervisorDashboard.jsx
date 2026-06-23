@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import { Chart, registerables } from 'chart.js';
 import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send, FileSearch, Bell } from 'lucide-react';
+import ProofRequestsView from './ProofRequestsView';
 
 Chart.register(...registerables);
 
@@ -541,6 +542,11 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
             </table>
           </div>
         )}
+      </section>
+
+      {/* Citizen Proof Requests Tracking */}
+      <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl">
+        <ProofRequestsView />
       </section>
       
       {/* Telemetry Dashboard Row */}

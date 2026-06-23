@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { PlusCircle, Inbox, Cpu, Loader, AlertTriangle, CheckCircle2, UploadCloud, Mic, Trash2, Video, Music, Image, Paperclip } from 'lucide-react';
+import LocationPicker from './LocationPicker';
 
 const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, getStatusBadge, getDepartmentName }) => {
   const [title, setTitle] = useState('');
@@ -8,6 +9,8 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
   const [priority, setPriority] = useState('medium');
   const [submissionResult, setSubmissionResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
 
   // Attachment states
   const [attachments, setAttachments] = useState([]); // [{ id, file, previewUrl, type }]
@@ -139,6 +142,8 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
       formData.append('title', title);
       formData.append('description', description);
       formData.append('priority', priority);
+      if (latitude !== null) formData.append('latitude', latitude);
+      if (longitude !== null) formData.append('longitude', longitude);
       
       attachments.forEach((att) => {
         formData.append('files', att.file);
@@ -154,6 +159,8 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
       setTitle('');
       setDescription('');
       setPriority('medium');
+      setLatitude(null);
+      setLongitude(null);
       
       // Clear attachments
       attachments.forEach((att) => URL.revokeObjectURL(att.previewUrl));
@@ -229,6 +236,16 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
                 <option value="medium">Medium Priority</option>
                 <option value="high">High Priority</option>
               </select>
+            </div>
+
+            {/* GIS Location Picker */}
+            <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-800">
+              <LocationPicker 
+                onLocationSelect={(lat, lng) => {
+                  setLatitude(lat);
+                  setLongitude(lng);
+                }} 
+              />
             </div>
 
             {/* Drag and Drop Zone */}
@@ -466,23 +483,54 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
                       </td>
                       <td className="py-4 px-4">
                         {getStatusBadge(ticket.status)}
-                        {ticket.status === 'resolved' && (
-                          <div className="mt-2">
-                            <button
-                              onClick={async () => {
-                                if (!window.confirm('Are you sure you want to request re-evaluation for this ticket?')) return;
-                                try {
-                                  await api.post(`/tickets/${ticket.id}/re-evaluate`);
-                                  alert('Re-evaluation request submitted successfully!');
-                                  onRefresh();
-                                } catch (err) {
-                                  alert(err.response?.data?.detail || 'Failed to submit re-evaluation.');
-                                }
-                              }}
-                              className="px-2.5 py-1 bg-blue-950/40 hover:bg-blue-950/80 border border-blue-900/30 text-blue-400 rounded-lg text-[9px] font-bold cursor-pointer transition-all block text-center"
-                            >
-                              Request Re-evaluation / Ask Question
-                            </button>
+                        {ticket.status === 'resolved' && ticket.citizen_satisfied === null && (
+                          <div className="mt-3 p-3 bg-slate-900 border border-slate-800 rounded-xl">
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2 text-center">Are you satisfied with the resolution?</p>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const formData = new FormData();
+                                    formData.append('satisfied', true);
+                                    await api.post(`/tickets/${ticket.id}/feedback`, formData);
+                                    onRefresh();
+                                  } catch (err) {
+                                    alert('Failed to submit feedback.');
+                                  }
+                                }}
+                                className="flex-1 px-2 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-900/30 text-emerald-400 rounded-lg text-[10px] font-bold transition-all"
+                              >
+                                👍 Yes
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (!window.confirm('This will re-open the grievance for administrative review. Are you sure?')) return;
+                                  try {
+                                    const formData = new FormData();
+                                    formData.append('satisfied', false);
+                                    await api.post(`/tickets/${ticket.id}/feedback`, formData);
+                                    alert('Grievance re-opened for administrative review.');
+                                    onRefresh();
+                                  } catch (err) {
+                                    alert('Failed to submit feedback.');
+                                  }
+                                }}
+                                className="flex-1 px-2 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/30 text-rose-400 rounded-lg text-[10px] font-bold transition-all"
+                              >
+                                👎 No (Re-open)
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {ticket.citizen_satisfied === true && (
+                          <div className="mt-2 text-[10px] font-bold text-emerald-500 bg-emerald-950/20 px-2 py-1 rounded border border-emerald-900/30 inline-flex items-center gap-1">
+                            <span>👍</span> Citizen Satisfied
+                          </div>
+                        )}
+                        {ticket.reopened && ticket.status !== 'resolved' && (
+                          <div className="mt-2 text-[9px] font-bold text-rose-500 uppercase tracking-widest inline-flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
+                            Re-opened by Citizen
                           </div>
                         )}
                       </td>

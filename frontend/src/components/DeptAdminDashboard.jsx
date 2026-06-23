@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { Inbox, Eye, Cpu, X, FileText, CheckCircle2, Loader, UserPlus, Bell, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import ProofRequestsView from './ProofRequestsView';
 
-const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBadge, getDepartmentName }) => {
+const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBadge, getDepartmentName, statusFilter }) => {
   const { user } = useAuth();
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -158,7 +159,12 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Inbox className="w-5 h-5 text-blue-400" />
-            <h2 className="font-extrabold text-lg text-slate-200" id="admin-table-title">Incoming Grievances Log</h2>
+            <h2 className="font-extrabold text-lg text-slate-200" id="admin-table-title">
+              {statusFilter === 'pending' ? 'Pending Assignments' : 
+               statusFilter === 'in-progress' ? 'In-Progress Cases' : 
+               statusFilter === 'resolved' ? 'Resolved Cases' : 
+               'Incoming Grievances Log'}
+            </h2>
           </div>
           <span className="text-xs text-slate-500 font-semibold">{tickets.length} assigned tickets</span>
         </div>
@@ -604,6 +610,10 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
           )}
         </div>
       )}
+      {/* Citizen Proof Requests Tracking */}
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mt-6">
+        <ProofRequestsView />
+      </section>
     </div>
   );
 };

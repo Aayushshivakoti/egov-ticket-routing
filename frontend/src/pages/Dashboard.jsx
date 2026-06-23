@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import CitizenDashboard from '../components/CitizenDashboard';
 import DeptAdminDashboard from '../components/DeptAdminDashboard';
 import SupervisorDashboard from '../components/SupervisorDashboard';
+import ReportTableView from '../components/ReportTableView';
+import ProofRequestsView from '../components/ProofRequestsView';
 import { LogOut, Cpu, User, Loader } from 'lucide-react';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
+  const { status } = useParams();
   const [tickets, setTickets] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,11 +19,66 @@ const Dashboard = () => {
   // Stats summary for the cards
   const [stats, setStats] = useState({ total: 0, pending: 0, in_progress: 0, resolved: 0 });
 
+  const calculateStats = (ticketList) => {
+    const s = { total: ticketList.length, pending: 0, in_progress: 0, resolved: 0 };
+    ticketList.forEach(t => {
+      if (t.status === 'pending') s.pending += 1;
+      else if (t.status === 'in_progress') s.in_progress += 1;
+      else if (t.status === 'resolved') s.resolved += 1;
+    });
+    setStats(s);
+  };
+
+  const getApiStatusParams = () => {
+    if (!status || status === 'total') return '';
+    if (status === 'pending') return '?status=pending';
+    if (status === 'in-progress') return '?status=in_progress';
+    if (status === 'resolved') return '?status=resolved';
+    return '';
+  };
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const statusQuery = getApiStatusParams();
+      const [filteredTicketsRes, deptsResponse, allTicketsRes] = await Promise.all([
+        api.get(`/tickets${statusQuery}`),
+        api.get('/departments'),
+        api.get('/tickets')
+      ]);
+
+      setTickets(filteredTicketsRes.data);
+      setDepartments(deptsResponse.data);
+      calculateStats(allTicketsRes.data);
+    } catch (err) {
+      console.error("Failed to load dashboard data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchDataSilent = async () => {
+    try {
+      const statusQuery = getApiStatusParams();
+      const [filteredTicketsRes, deptsResponse, allTicketsRes] = await Promise.all([
+        api.get(`/tickets${statusQuery}`),
+        api.get('/departments'),
+        api.get('/tickets')
+      ]);
+
+      setTickets(filteredTicketsRes.data);
+      setDepartments(deptsResponse.data);
+      calculateStats(allTicketsRes.data);
+    } catch (err) {
+      console.error("Failed to silently load updates:", err);
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchData();
     }
-  }, [user]);
+  }, [user, status]);
 
   useEffect(() => {
     if (!user) return;
@@ -55,48 +114,7 @@ const Dashboard = () => {
     };
   }, [user]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [ticketsResponse, deptsResponse] = await Promise.all([
-        api.get('/tickets'),
-        api.get('/departments')
-      ]);
 
-      setTickets(ticketsResponse.data);
-      setDepartments(deptsResponse.data);
-      calculateStats(ticketsResponse.data);
-    } catch (err) {
-      console.error("Failed to load dashboard data:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchDataSilent = async () => {
-    try {
-      const [ticketsResponse, deptsResponse] = await Promise.all([
-        api.get('/tickets'),
-        api.get('/departments')
-      ]);
-
-      setTickets(ticketsResponse.data);
-      setDepartments(deptsResponse.data);
-      calculateStats(ticketsResponse.data);
-    } catch (err) {
-      console.error("Failed to silently load updates:", err);
-    }
-  };
-
-  const calculateStats = (ticketList) => {
-    const s = { total: ticketList.length, pending: 0, in_progress: 0, resolved: 0 };
-    ticketList.forEach(t => {
-      if (t.status === 'pending') s.pending += 1;
-      else if (t.status === 'in_progress') s.in_progress += 1;
-      else if (t.status === 'resolved') s.resolved += 1;
-    });
-    setStats(s);
-  };
 
   const getPriorityBadge = (p) => {
     const styles = {
@@ -148,6 +166,7 @@ const Dashboard = () => {
           getPriorityBadge={getPriorityBadge}
           getStatusBadge={getStatusBadge}
           getDepartmentName={getDepartmentName}
+          statusFilter={status}
         />
       );
     } else if (user.role === 'dept_admin') {
@@ -158,6 +177,7 @@ const Dashboard = () => {
           getPriorityBadge={getPriorityBadge}
           getStatusBadge={getStatusBadge}
           getDepartmentName={getDepartmentName}
+          statusFilter={status}
         />
       );
     } else {
@@ -232,35 +252,47 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Global Summary Stats Card Grid */}
+        {/* Global Summary Stats Card Grid as Navigation Tabs */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-5 bg-slate-900 border border-slate-800/80 rounded-2xl flex items-center justify-between">
+          <NavLink 
+            to="/admin/reports/total" 
+            className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
+          >
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Reports</p>
               <h3 className="text-2xl font-black mt-1 text-slate-200" id="stat-total">{stats.total}</h3>
             </div>
-          </div>
+          </NavLink>
 
-          <div className="p-5 bg-slate-900 border border-slate-800/80 rounded-2xl flex items-center justify-between">
+          <NavLink 
+            to="/admin/reports/pending" 
+            className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-yellow-500 shadow-lg shadow-yellow-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
+          >
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pending Assign</p>
               <h3 className="text-2xl font-black mt-1 text-yellow-400" id="stat-pending">{stats.pending}</h3>
             </div>
-          </div>
+          </NavLink>
 
-          <div className="p-5 bg-slate-900 border border-slate-800/80 rounded-2xl flex items-center justify-between">
+          <NavLink 
+            to="/admin/reports/in-progress" 
+            className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-blue-500 shadow-lg shadow-blue-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
+          >
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">In Progress</p>
               <h3 className="text-2xl font-black mt-1 text-blue-400" id="stat-progress">{stats.in_progress}</h3>
             </div>
-          </div>
+          </NavLink>
 
-          <div className="p-5 bg-slate-900 border border-slate-800/80 rounded-2xl flex items-center justify-between">
+          <NavLink 
+            to="/admin/reports/resolved" 
+            className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-emerald-500 shadow-lg shadow-emerald-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
+          >
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Resolved</p>
               <h3 className="text-2xl font-black mt-1 text-emerald-400" id="stat-resolved">{stats.resolved}</h3>
             </div>
-          </div>
+          </NavLink>
         </section>
 
         {/* Loading state indicator */}
@@ -270,9 +302,26 @@ const Dashboard = () => {
             <span className="text-xs font-bold uppercase tracking-widest">Loading Analytics...</span>
           </div>
         ) : (
-          renderDashboardByRole()
-        )}
+          <>
+            {status ? (
+              <ReportTableView 
+                statusFilter={status}
+                tickets={tickets}
+                getPriorityBadge={getPriorityBadge}
+                getStatusBadge={getStatusBadge}
+              />
+            ) : (
+              renderDashboardByRole()
+            )}
 
+            {/* Citizen Proof Requests Tracking (Only when viewing specific reports) */}
+            {status && user && user.role !== 'citizen' && (
+              <section className="mt-8 p-6 bg-slate-900 border border-slate-800 rounded-2xl">
+                <ProofRequestsView />
+              </section>
+            )}
+          </>
+        )}
       </main>
     </div>
   );

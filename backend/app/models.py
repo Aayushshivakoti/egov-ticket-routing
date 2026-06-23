@@ -72,6 +72,10 @@ class Ticket(Base):
     proof_requested_at = Column(DateTime(timezone=True), nullable=True)
     sla_violated = Column(Boolean, default=False, nullable=False, server_default='0')
     
+    # Geographic Information (GIS)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    
     # Timestamps
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
@@ -108,6 +112,19 @@ class TicketAttachment(Base):
         return f"<TicketAttachment(id={self.id}, ticket_id={self.ticket_id}, file_type='{self.file_type}', is_proof={self.is_proof})>"
 
 
+class ProofRequest(Base):
+    __tablename__ = "proof_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, unique=True)
+    citizen_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(30), default="pending", nullable=False) # pending, fulfilled, rejected
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False)
+
+    ticket = relationship("Ticket", foreign_keys=[ticket_id])
+    citizen = relationship("User", foreign_keys=[citizen_id])
+
+
 class PendingRoleChange(Base):
     __tablename__ = "pending_role_changes"
 
@@ -133,4 +150,18 @@ class Notification(Base):
 
     user = relationship("User", foreign_keys=[user_id])
     ticket = relationship("Ticket", foreign_keys=[ticket_id])
+
+
+class SystemAuditLog(Base):
+    __tablename__ = "system_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action_performed = Column(String(100), nullable=False)
+    payload = Column(Text, nullable=False)
+    previous_row_hash = Column(String(64), nullable=False)
+    current_row_hash = Column(String(64), nullable=False, unique=True)
+
+    user = relationship("User", foreign_keys=[user_id])
 

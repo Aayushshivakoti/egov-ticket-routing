@@ -20,9 +20,18 @@ def classify_ticket_task(ticket_id: int):
 
         # Run the classification logic and measure latency
         start_time = time.time()
-        dept_id, confidence, needs_verification, priority_override = classify_ticket(
-            ticket.title, ticket.description, db
-        )
+        
+        try:
+            dept_id, confidence, needs_verification, priority_override = classify_ticket(
+                ticket.title, ticket.description, db
+            )
+        except Exception as ai_err:
+            print(f"AI Classification Failed: {ai_err}. Falling back to default Unassigned.")
+            dept_id = None
+            confidence = 0.0
+            needs_verification = True
+            priority_override = None
+            
         latency_ms = (time.time() - start_time) * 1000
         print(f"Classification execution completed in {latency_ms:.2f} ms")
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import AllGrievances from './pages/AllGrievances';
@@ -9,8 +10,9 @@ import {
   Building2, Users, FileText, ExternalLink, Clock, Send
 } from 'lucide-react';
 
-const AppContent = () => {
+const LandingPage = () => {
   const { user, loading, login } = useAuth();
+  const navigate = useNavigate();
   
   // Modals state
   const [loginModalOpen, setLoginModalOpen] = useState(false);
@@ -81,6 +83,7 @@ const AppContent = () => {
       // Reset fields
       setLoginEmail('');
       setLoginPassword('');
+      navigate('/admin');
     } catch (err) {
       setLoginError(err.message || 'Authentication failed. Please verify credentials.');
     } finally {
@@ -206,10 +209,6 @@ const AppContent = () => {
     );
   }
 
-  // Active user session immediately loads corresponding dashboard layout
-  if (user) {
-    return <Dashboard />;
-  }
 
   // All Grievances page (full database view)
   if (currentPage === 'all-grievances') {
@@ -245,21 +244,32 @@ const AppContent = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setLoginModalOpen(true)}
-              className="px-4 py-2 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900 rounded-xl text-xs font-bold transition-all cursor-pointer"
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => {
-                setRegStep(1);
-                setRegisterModalOpen(true);
-              }}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 cursor-pointer"
-            >
-              Register as Citizen
-            </button>
+            {user ? (
+              <button
+                onClick={() => navigate('/admin')}
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-emerald-600 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+              >
+                Go to Dashboard
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => setLoginModalOpen(true)}
+                  className="px-4 py-2 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => {
+                    setRegStep(1);
+                    setRegisterModalOpen(true);
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 cursor-pointer"
+                >
+                  Register as Citizen
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -826,10 +836,47 @@ const AppContent = () => {
   );
 };
 
+const ProtectedRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center gap-4 text-slate-100">
+        <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-center animate-pulse">
+          <Cpu className="w-10 h-10 text-blue-500 animate-spin-slow" />
+        </div>
+      </div>
+    );
+  }
+  if (!user) {
+    return <Navigate to="/" />;
+  }
+  return children;
+};
+
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <Router>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route 
+            path="/admin" 
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/reports/:status" 
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+        </Routes>
+      </Router>
     </AuthProvider>
   );
 }
