@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import {
   FileSpreadsheet, Search, Filter, ArrowLeft, ChevronLeft, ChevronRight,
-  Eye, Clock, Loader, CheckCircle2, AlertCircle, X
+  Eye, Clock, Loader, CheckCircle2, AlertCircle, X, Send
 } from 'lucide-react';
 
 const AllGrievances = ({ onBack, departments }) => {
@@ -271,23 +271,33 @@ const AllGrievances = ({ onBack, departments }) => {
                         <td className="py-4 px-4 text-right">
                           {row.status === 'resolved' ? (
                             <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => handleViewProof(row.id)}
-                                disabled={loadingProof}
-                                className="px-3 py-1.5 bg-emerald-950/40 hover:bg-emerald-950/80 border border-emerald-900/30 text-emerald-450 hover:text-emerald-400 rounded-lg text-[10px] font-bold tracking-wide transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                View Proof
-                              </button>
-                              {!row.proof_requested_at && (
+                              {row.has_proof ? (
                                 <button
-                                  onClick={() => handleRequestProof(row.id)}
-                                  disabled={requestingProof === row.id}
-                                  className="px-3 py-1.5 bg-amber-950/40 hover:bg-amber-950/80 border border-amber-900/30 text-amber-400 hover:text-amber-300 rounded-lg text-[10px] font-bold tracking-wide transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+                                  onClick={() => handleViewProof(row.id)}
+                                  disabled={loadingProof}
+                                  className="px-3 py-1.5 bg-emerald-950/40 hover:bg-emerald-950/80 border border-emerald-900/30 text-emerald-450 hover:text-emerald-400 rounded-lg text-[10px] font-bold tracking-wide transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
                                 >
-                                  <Clock className="w-3.5 h-3.5" />
-                                  {requestingProof === row.id ? '...' : 'Request Proof'}
+                                  <Eye className="w-3.5 h-3.5" />
+                                  View Proof & Report
                                 </button>
+                              ) : (
+                                <>
+                                  {row.proof_requested_at ? (
+                                    <span className="px-3 py-1.5 bg-amber-950/30 border border-amber-900/20 text-amber-500 rounded-lg text-[10px] font-bold tracking-wide inline-flex items-center gap-1 select-none animate-pulse">
+                                      <Clock className="w-3.5 h-3.5" />
+                                      Proof Requested — Awaiting
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleRequestProof(row.id)}
+                                      disabled={requestingProof === row.id}
+                                      className="px-3.5 py-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white rounded-lg text-[10px] font-extrabold tracking-wide transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5 shadow-lg shadow-rose-500/15 animate-pulse hover:animate-none"
+                                    >
+                                      <Send className="w-3.5 h-3.5" />
+                                      {requestingProof === row.id ? 'Sending...' : 'Request Resolution Proof'}
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </div>
                           ) : (

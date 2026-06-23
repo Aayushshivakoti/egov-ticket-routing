@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Inbox, Eye, Cpu, X, FileText, CheckCircle2, Loader, UserPlus } from 'lucide-react';
+import { Inbox, Eye, Cpu, X, FileText, CheckCircle2, Loader, UserPlus, Bell, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBadge, getDepartmentName }) => {
@@ -19,6 +19,10 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
   const [employees, setEmployees] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
 
+  // Notification alerts state
+  const [notifications, setNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+
   const fetchDeptEmployees = async () => {
     if (!user?.department_id) return;
     setLoadingEmployees(true);
@@ -36,7 +40,20 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
     if (user?.dept_role === 'Department Head') {
       fetchDeptEmployees();
     }
+    fetchNotifications();
   }, [user]);
+
+  const fetchNotifications = async () => {
+    setLoadingNotifications(true);
+    try {
+      const res = await api.get('/tickets/notifications?category=proof_request');
+      setNotifications(res.data);
+    } catch (err) {
+      console.error('Failed to load notifications:', err);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
 
   const handleOpenModal = (ticket) => {
     setSelectedTicket(ticket);
@@ -110,6 +127,33 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
 
   return (
     <div className="space-y-6">
+      {/* Notification Alerts for Department Head */}
+      {notifications.length > 0 && (
+        <section className="p-5 bg-gradient-to-r from-amber-950/20 to-slate-900 border border-amber-900/30 rounded-2xl">
+          <div className="flex items-center gap-2 mb-3 border-b border-amber-900/20 pb-2">
+            <Bell className="w-5 h-5 text-amber-400 animate-pulse" />
+            <h2 className="font-extrabold text-sm text-amber-300 uppercase tracking-wider">Proof Request Alerts</h2>
+            <span className="ml-auto px-2 py-0.5 bg-amber-600 text-white text-[9px] font-extrabold rounded-full">{notifications.filter(n => !n.is_read).length}</span>
+          </div>
+          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            {notifications.filter(n => !n.is_read).map((notif) => (
+              <div key={notif.id} className="flex items-start gap-3 p-3 bg-slate-950/40 border border-amber-900/20 rounded-xl">
+                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5 animate-pulse" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-slate-200 font-medium leading-relaxed">{notif.message}</p>
+                  <p className="text-[9px] text-slate-500 font-semibold mt-1">
+                    {new Date(notif.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+                {notif.ticket_id && (
+                  <span className="text-[9px] font-mono font-bold text-amber-500 whitespace-nowrap">#T-{notif.ticket_id}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">

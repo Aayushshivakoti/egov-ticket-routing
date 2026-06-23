@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import { Chart, registerables } from 'chart.js';
-import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send } from 'lucide-react';
+import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send, FileSearch, Bell } from 'lucide-react';
 
 Chart.register(...registerables);
 
@@ -44,6 +44,10 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
   // Approvals Queue state
   const [pendingChanges, setPendingChanges] = useState([]);
   const [loadingChanges, setLoadingChanges] = useState(false);
+
+  // Compliance Audit Log state
+  const [auditLog, setAuditLog] = useState([]);
+  const [loadingAudit, setLoadingAudit] = useState(true);
 
   const fetchPendingChanges = async () => {
     setLoadingChanges(true);
@@ -235,10 +239,23 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
     }
   };
 
+  const fetchAuditLog = async () => {
+    setLoadingAudit(true);
+    try {
+      const res = await api.get('/tickets/notifications?category=compliance_audit');
+      setAuditLog(res.data);
+    } catch (err) {
+      console.error('Failed to load compliance audit log:', err);
+    } finally {
+      setLoadingAudit(false);
+    }
+  };
+
   useEffect(() => {
     fetchTelemetry();
     fetchSlaViolations();
     fetchPendingChanges();
+    fetchAuditLog();
   }, [tickets]);
 
   const fetchSlaViolations = async () => {
@@ -468,6 +485,63 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
           </div>
         </section>
       )}
+
+      {/* Compliance Audit Log */}
+      <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl">
+        <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <FileSearch className="w-5 h-5 text-cyan-400" />
+            <h2 className="font-extrabold text-base text-slate-200">Compliance Audit Log</h2>
+          </div>
+          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+            {auditLog.length} entries
+          </span>
+        </div>
+        {loadingAudit ? (
+          <div className="flex items-center justify-center py-10 text-slate-500 gap-2">
+            <Loader className="w-4 h-4 animate-spin text-cyan-500" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Loading Audit Log...</span>
+          </div>
+        ) : auditLog.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-600 gap-2 border border-dashed border-slate-800 rounded-xl">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">No pending compliance events</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto border border-slate-850 rounded-xl bg-slate-950/20">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-850 bg-slate-950/40 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                  <th className="py-2.5 px-3 w-10">
+                    <Bell className="w-3.5 h-3.5 text-cyan-500" />
+                  </th>
+                  <th className="py-2.5 px-3">Audit Event</th>
+                  <th className="py-2.5 px-3 w-20">Ticket</th>
+                  <th className="py-2.5 px-3 w-36">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-855/60 text-xs">
+                {auditLog.map((entry) => (
+                  <tr key={entry.id} className={`transition-colors ${entry.is_read ? 'opacity-60' : 'hover:bg-cyan-950/10'}`}>
+                    <td className="py-3 px-3">
+                      <span className={`w-2.5 h-2.5 rounded-full block ${entry.is_read ? 'bg-slate-700' : 'bg-cyan-400 animate-pulse'}`} />
+                    </td>
+                    <td className="py-3 px-3">
+                      <p className="text-slate-200 font-medium leading-relaxed text-[11px]">{entry.message}</p>
+                    </td>
+                    <td className="py-3 px-3 font-mono text-[10px] text-slate-400 font-bold">
+                      {entry.ticket_id ? `#T-${entry.ticket_id}` : '—'}
+                    </td>
+                    <td className="py-3 px-3 text-[10px] text-slate-500 font-semibold whitespace-nowrap">
+                      {new Date(entry.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
       
       {/* Telemetry Dashboard Row */}
       {telemetry && (

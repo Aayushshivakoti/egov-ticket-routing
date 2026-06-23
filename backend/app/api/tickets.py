@@ -6,7 +6,7 @@ import uuid
 import shutil
 import datetime
 from app.db import get_db
-from app.models import Ticket, Department, User, TicketAttachment
+from app.models import Ticket, Department, User, TicketAttachment, Notification
 from app.schemas import TicketResponse, TicketUpdate, TicketStatusUpdate, TicketAssignRequest
 from app.api.auth_utils import get_current_user
 from app.classifier import get_reasoning_keywords
@@ -433,6 +433,10 @@ def get_public_feed(limit: Optional[int] = 8, db: Session = Depends(get_db)):
     tickets = query.all()
     feed = []
     for t in tickets:
+        proof_count = db.query(TicketAttachment).filter(
+            TicketAttachment.ticket_id == t.id,
+            TicketAttachment.is_proof == True
+        ).count()
         feed.append({
             "id": t.id,
             "title": t.title,
@@ -440,7 +444,9 @@ def get_public_feed(limit: Optional[int] = 8, db: Session = Depends(get_db)):
             "status": t.status,
             "created_at": t.created_at,
             "sla_violated": t.sla_violated,
-            "proof_requested_at": t.proof_requested_at
+            "proof_requested_at": t.proof_requested_at,
+            "has_proof": proof_count > 0 or bool(t.report),
+            "report": t.report
         })
     return feed
 
@@ -476,6 +482,10 @@ def get_public_all_grievances(
     
     feed = []
     for t in tickets:
+        proof_count = db.query(TicketAttachment).filter(
+            TicketAttachment.ticket_id == t.id,
+            TicketAttachment.is_proof == True
+        ).count()
         feed.append({
             "id": t.id,
             "title": t.title,
@@ -483,7 +493,9 @@ def get_public_all_grievances(
             "status": t.status,
             "created_at": t.created_at,
             "sla_violated": t.sla_violated,
-            "proof_requested_at": t.proof_requested_at
+            "proof_requested_at": t.proof_requested_at,
+            "has_proof": proof_count > 0 or bool(t.report),
+            "report": t.report
         })
     return {
         "tickets": feed,
@@ -536,7 +548,6 @@ def request_proof(
         raise HTTPException(status_code=400, detail="Proof can only be requested for resolved tickets")
     
     # Check if proof already exists
-    from app.models import TicketAttachment
     existing_proof = db.query(TicketAttachment).filter(
         TicketAttachment.ticket_id == ticket_id,
         TicketAttachment.is_proof == True
@@ -544,25 +555,64 @@ def request_proof(
     if existing_proof:
         raise HTTPException(status_code=400, detail="Resolution proof already exists for this ticket")
     
+    # 1. Update proof_requested_at timestamp
     ticket.proof_requested_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(ticket)
     
-    # Send notification to department admin
+    # 2. Inject Department Head notification
     if ticket.assigned_department_id:
-        dept_admins = db.query(User).filter(
+        dept_head = db.query(User).filter(
+            User.department_id == ticket.assigned_department_id,
+            User.dept_role == "Department Head",
+            User.status == "active"
+        ).first()
+        if dept_head:
+            head_notification = Notification(
+                user_id=dept_head.id,
+                ticket_id=ticket.id,
+                category="proof_request",
+                message=f"Action Required: Public has requested proof for Ticket #{ticket.id} — '{ticket.title}'. Upload resolution evidence within 24 hours."
+            )
+            db.add(head_notification)
+            send_mock_email(
+                dept_head.email,
+                f"Proof of Resolution Requested - Ticket #{ticket.id}",
+                f"Hello {dept_head.name},\n\nA proof of resolution has been requested for ticket #{ticket.id} titled '{ticket.title}'.\n\nPlease upload the resolution proof within 24 hours to avoid SLA violation.\n\nThank you,\nE-Governance Helpdesk Team"
+            )
+        
+        # Also notify all other dept admins via email
+        other_admins = db.query(User).filter(
             User.department_id == ticket.assigned_department_id,
             User.role == "dept_admin",
-            User.status == "active"
+            User.status == "active",
+            User.dept_role != "Department Head"
         ).all()
-        for admin in dept_admins:
+        for admin in other_admins:
             send_mock_email(
                 admin.email,
                 f"Proof of Resolution Requested - Ticket #{ticket.id}",
-                f"Hello {admin.name},\n\nA proof of resolution has been requested for ticket #{ticket.id} titled '{ticket.title}'.\n\nPlease upload the resolution proof within 24 hours to avoid SLA violation.\n\nThank you,\nE-Governance Helpdesk Team"
+                f"Hello {admin.name},\n\nA proof of resolution has been requested for ticket #{ticket.id} titled '{ticket.title}'.\n\nPlease coordinate with your Department Head.\n\nThank you,\nE-Governance Helpdesk Team"
             )
     
-    return {"detail": "Proof request sent successfully", "proof_requested_at": ticket.proof_requested_at}
+    # 3. Inject Super Admin Compliance Audit Log entry
+    super_admins = db.query(User).filter(
+        User.role == "super_admin",
+        User.status == "active"
+    ).all()
+    dept_name = ticket.assigned_department.name if ticket.assigned_department else "Unknown"
+    for sa_user in super_admins:
+        audit_notification = Notification(
+            user_id=sa_user.id,
+            ticket_id=ticket.id,
+            category="compliance_audit",
+            message=f"SLA Compliance Watch: Proof requested for Ticket #{ticket.id} ('{ticket.title}') assigned to {dept_name}. 24-hour window initiated at {ticket.proof_requested_at.strftime('%Y-%m-%d %H:%M UTC')}."
+        )
+        db.add(audit_notification)
+    
+    db.commit()
+    
+    return {"detail": "Proof request sent successfully. Department Head and Super Admin have been notified.", "proof_requested_at": ticket.proof_requested_at}
 
 @router.get("/sla-violations")
 def get_sla_violations(
@@ -712,3 +762,44 @@ def re_evaluate_ticket(
         
     return attach_telemetry_fields(ticket, db)
 
+
+@router.get("/notifications")
+def get_my_notifications(
+    category: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch notifications for the current user, optionally filtered by category."""
+    query = db.query(Notification).filter(Notification.user_id == current_user.id)
+    if category:
+        query = query.filter(Notification.category == category)
+    notifications = query.order_by(Notification.created_at.desc()).limit(50).all()
+    return [
+        {
+            "id": n.id,
+            "ticket_id": n.ticket_id,
+            "category": n.category,
+            "message": n.message,
+            "is_read": n.is_read,
+            "created_at": n.created_at
+        }
+        for n in notifications
+    ]
+
+
+@router.post("/notifications/{notification_id}/read")
+def mark_notification_read(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Mark a notification as read."""
+    notif = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == current_user.id
+    ).first()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    notif.is_read = True
+    db.commit()
+    return {"detail": "Notification marked as read"}

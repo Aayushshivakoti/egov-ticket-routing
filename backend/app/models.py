@@ -119,3 +119,18 @@ class PendingRoleChange(Base):
 
     user = relationship("User", foreign_keys=[user_id])
 
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=True)
+    category = Column(String(50), nullable=False)  # proof_request, sla_alert, role_change, system
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False, nullable=False, server_default='0')
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    user = relationship("User", foreign_keys=[user_id])
+    ticket = relationship("Ticket", foreign_keys=[ticket_id])
+
