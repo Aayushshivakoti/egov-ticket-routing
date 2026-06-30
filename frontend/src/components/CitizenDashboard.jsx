@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { PlusCircle, Inbox, Cpu, Loader, AlertTriangle, CheckCircle2, UploadCloud, Mic, Trash2, Video, Music, Image, Paperclip, Eye, MessageSquare } from 'lucide-react';
+import { PlusCircle, Inbox, Cpu, Loader, AlertTriangle, CheckCircle2, UploadCloud, Mic, Trash2, Video, Music, Image, Paperclip, Eye, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
 import LocationPicker from './LocationPicker';
 import ClarificationModal from './ClarificationModal';
+import TicketTimeline from './TicketTimeline';
 
 const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, getStatusBadge, getDepartmentName }) => {
   const [selectedClarificationTicket, setSelectedClarificationTicket] = useState(null);
@@ -13,6 +14,13 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
   const [submitting, setSubmitting] = useState(false);
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
+  const [expandedTicketIds, setExpandedTicketIds] = useState([]);
+
+  const toggleExpandTicket = (id) => {
+    setExpandedTicketIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   // Attachment states
   const [attachments, setAttachments] = useState([]); // [{ id, file, previewUrl, type }]
@@ -416,6 +424,7 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-950/20">
+                    <th className="py-4 px-4 w-10 text-center"></th>
                     <th className="py-4 px-4 w-16">ID</th>
                     <th className="py-4 px-4">Subject</th>
                     <th className="py-4 px-4">Priority</th>
@@ -424,124 +433,148 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 text-sm">
-                  {tickets.map((ticket) => (
-                    <tr key={ticket.id} className="hover:bg-slate-900/60 transition-colors citizen-ticket-row">
-                      <td className="py-4 px-4 font-mono font-bold text-xs text-slate-400">
-                        #T-{ticket.id}
-                      </td>
-                      <td className="py-4 px-4">
-                        <p className="font-bold text-slate-200">{ticket.title}</p>
-                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{ticket.description}</p>
-                        {ticket.attachments && ticket.attachments.length > 0 && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-semibold mt-1.5 bg-slate-950 px-2 py-0.5 border border-slate-850 rounded-lg">
-                            <Paperclip className="w-3 h-3 text-slate-400" />
-                            {ticket.attachments.length} attachment(s)
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-4 px-4">
-                        {getPriorityBadge(ticket.priority)}
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="font-semibold text-slate-300 text-xs">
-                          {getDepartmentName(ticket.assigned_department_id)}
-                        </span>
-                        {ticket.assigned_employee ? (
-                          <div className="mt-1">
-                            <span className="text-[10px] text-emerald-450 font-bold block">
-                              Assigned: {ticket.assigned_employee.name}
-                            </span>
-                            {!ticket.reassignment_requested ? (
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    await api.post(`/tickets/${ticket.id}/request-reassignment`);
-                                    alert('Officer change request sent successfully!');
-                                    onRefresh();
-                                  } catch (err) {
-                                    alert('Failed to request officer change.');
-                                  }
-                                }}
-                                className="mt-1 px-2 py-0.5 bg-amber-950/40 hover:bg-amber-950/80 border border-amber-900/30 text-amber-400 rounded text-[9px] font-bold cursor-pointer transition-all"
-                              >
-                                Request Officer Change
-                              </button>
-                            ) : (
-                              <span className="text-[9px] text-amber-500 font-bold block mt-1">Reassignment Pending</span>
+                  {tickets.map((ticket) => {
+                    const isExpanded = expandedTicketIds.includes(ticket.id);
+                    return (
+                      <React.Fragment key={ticket.id}>
+                        <tr 
+                          onClick={() => toggleExpandTicket(ticket.id)}
+                          className="hover:bg-slate-900/40 transition-colors citizen-ticket-row cursor-pointer select-none"
+                        >
+                          <td className="py-4 px-4 text-center">
+                            {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                          </td>
+                          <td className="py-4 px-4 font-mono font-bold text-xs text-slate-400">
+                            #T-{ticket.id}
+                          </td>
+                          <td className="py-4 px-4">
+                            <p className="font-bold text-slate-200">{ticket.title}</p>
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{ticket.description}</p>
+                            {ticket.attachments && ticket.attachments.length > 0 && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-semibold mt-1.5 bg-slate-950 px-2 py-0.5 border border-slate-850 rounded-lg">
+                                <Paperclip className="w-3 h-3 text-slate-400" />
+                                {ticket.attachments.length} attachment(s)
+                              </span>
                             )}
-                          </div>
-                        ) : (
-                          <span className="text-[9px] text-slate-600 block mt-0.5 italic">Unassigned</span>
-                        )}
-                        {ticket.ai_confidence !== null && (
-                          <span className="text-[9px] text-slate-500 block mt-1">
-                            AI Confidence: {(ticket.ai_confidence * 100).toFixed(0)}%
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-4 px-4">
-                        {getStatusBadge(ticket.status)}
-                        {ticket.status === 'resolved' && ticket.citizen_satisfied === null && (
-                          <div className="mt-3 p-3 bg-slate-900 border border-slate-800 rounded-xl">
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2 text-center">Are you satisfied with the resolution?</p>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    const formData = new FormData();
-                                    formData.append('satisfied', true);
-                                    await api.post(`/tickets/${ticket.id}/feedback`, formData);
-                                    onRefresh();
-                                  } catch (err) {
-                                    alert('Failed to submit feedback.');
-                                  }
-                                }}
-                                className="flex-1 px-2 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-900/30 text-emerald-400 rounded-lg text-[10px] font-bold transition-all"
-                              >
-                                👍 Yes
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  if (!window.confirm('This will re-open the grievance for administrative review. Are you sure?')) return;
-                                  try {
-                                    const formData = new FormData();
-                                    formData.append('satisfied', false);
-                                    await api.post(`/tickets/${ticket.id}/feedback`, formData);
-                                    alert('Grievance re-opened for administrative review.');
-                                    onRefresh();
-                                  } catch (err) {
-                                    alert('Failed to submit feedback.');
-                                  }
-                                }}
-                                className="flex-1 px-2 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/30 text-rose-400 rounded-lg text-[10px] font-bold transition-all"
-                              >
-                                👎 No (Re-open)
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        {ticket.citizen_satisfied === true && (
-                          <div className="mt-2 text-[10px] font-bold text-emerald-500 bg-emerald-950/20 px-2 py-1 rounded border border-emerald-900/30 inline-flex items-center gap-1">
-                            <span>👍</span> Citizen Satisfied
-                          </div>
-                        )}
-                        {ticket.reopened && ticket.status !== 'resolved' && (
-                          <div className="mt-2 text-[9px] font-bold text-rose-500 uppercase tracking-widest flex flex-col gap-2">
-                            <span className="inline-flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
-                              Re-opened by Citizen
+                          </td>
+                          <td className="py-4 px-4">
+                            {getPriorityBadge(ticket.priority)}
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className="font-semibold text-slate-300 text-xs">
+                              {getDepartmentName(ticket.assigned_department_id)}
                             </span>
-                            <button
-                              onClick={() => setSelectedClarificationTicket(ticket)}
-                              className="px-3 py-1.5 bg-blue-900/40 hover:bg-blue-800/60 border border-blue-900/50 text-blue-400 rounded-lg text-[10px] font-bold transition-all w-fit"
-                            >
-                              View / Reply Clarifications
-                            </button>
-                          </div>
+                            {ticket.assigned_employee ? (
+                              <div className="mt-1">
+                                <span className="text-[10px] text-emerald-450 font-bold block">
+                                  Assigned: {ticket.assigned_employee.name}
+                                </span>
+                                {!ticket.reassignment_requested ? (
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        await api.post(`/tickets/${ticket.id}/request-reassignment`);
+                                        alert('Officer change request sent successfully!');
+                                        onRefresh();
+                                      } catch (err) {
+                                        alert('Failed to request officer change.');
+                                      }
+                                    }}
+                                    className="mt-1 px-2 py-0.5 bg-amber-950/40 hover:bg-amber-950/80 border border-amber-900/30 text-amber-400 rounded text-[9px] font-bold cursor-pointer transition-all"
+                                  >
+                                    Request Officer Change
+                                  </button>
+                                ) : (
+                                  <span className="text-[9px] text-amber-500 font-bold block mt-1">Reassignment Pending</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[9px] text-slate-600 block mt-0.5 italic">Unassigned</span>
+                            )}
+                            {ticket.ai_confidence !== null && (
+                              <span className="text-[9px] text-slate-500 block mt-1">
+                                AI Confidence: {(ticket.ai_confidence * 100).toFixed(0)}%
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-4">
+                            {getStatusBadge(ticket.status)}
+                            {ticket.status === 'resolved' && ticket.citizen_satisfied === null && (
+                              <div className="mt-3 p-3 bg-slate-900 border border-slate-800 rounded-xl">
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2 text-center">Are you satisfied with the resolution?</p>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        const formData = new FormData();
+                                        formData.append('satisfied', true);
+                                        await api.post(`/tickets/${ticket.id}/feedback`, formData);
+                                        onRefresh();
+                                      } catch (err) {
+                                        alert('Failed to submit feedback.');
+                                      }
+                                    }}
+                                    className="flex-1 px-2 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-900/30 text-emerald-400 rounded-lg text-[10px] font-bold transition-all"
+                                  >
+                                    👍 Yes
+                                  </button>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (!window.confirm('This will re-open the grievance for administrative review. Are you sure?')) return;
+                                      try {
+                                        const formData = new FormData();
+                                        formData.append('satisfied', false);
+                                        await api.post(`/tickets/${ticket.id}/feedback`, formData);
+                                        alert('Grievance re-opened for administrative review.');
+                                        onRefresh();
+                                      } catch (err) {
+                                        alert('Failed to submit feedback.');
+                                      }
+                                    }}
+                                    className="flex-1 px-2 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/30 text-rose-400 rounded-lg text-[10px] font-bold transition-all"
+                                  >
+                                    👎 No (Re-open)
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {ticket.citizen_satisfied === true && (
+                              <div className="mt-2 text-[10px] font-bold text-emerald-500 bg-emerald-950/20 px-2 py-1 rounded border border-emerald-900/30 inline-flex items-center gap-1">
+                                <span>👍</span> Citizen Satisfied
+                              </div>
+                            )}
+                            {ticket.reopened && ticket.status !== 'resolved' && (
+                              <div className="mt-2 text-[9px] font-bold text-rose-500 uppercase tracking-widest flex flex-col gap-2">
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
+                                  Re-opened by Citizen
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedClarificationTicket(ticket);
+                                  }}
+                                  className="px-3 py-1.5 bg-blue-900/40 hover:bg-blue-800/60 border border-blue-900/50 text-blue-400 rounded-lg text-[10px] font-bold transition-all w-fit"
+                                >
+                                  View / Reply Clarifications
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan="6" className="p-4 bg-slate-950/40 border-t border-b border-slate-800/60">
+                              <TicketTimeline ticket={ticket} departmentName={getDepartmentName(ticket.assigned_department_id)} />
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                    </tr>
-                  ))}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

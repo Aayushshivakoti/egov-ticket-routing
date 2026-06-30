@@ -46,7 +46,9 @@ const ClarificationModal = ({ ticket, onClose, onRefresh, currentUserRole }) => 
       setFiles([]);
       fetchClarifications();
     } catch (err) {
-      alert("Failed to post clarification.");
+      const errorDetail = err.response?.data?.detail;
+      const errorMsg = typeof errorDetail === 'object' ? JSON.stringify(errorDetail) : (errorDetail || err.message);
+      alert("Failed to post clarification: " + errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -70,7 +72,7 @@ const ClarificationModal = ({ ticket, onClose, onRefresh, currentUserRole }) => 
       onRefresh();
       onClose();
     } catch (err) {
-      alert("Failed to update status: " + (err.response?.data?.detail || err.message));
+      alert("Failed to mark as resolved: " + (err.response?.data?.detail || err.message));
     }
   };
 

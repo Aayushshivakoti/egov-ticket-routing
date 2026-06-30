@@ -89,27 +89,24 @@ def classify_ticket_task(ticket_id: int):
 def check_sla_violations():
     """
     Background worker: checks for resolved tickets where proof was requested
-    more than 24 hours ago but no proof has been uploaded.
-    Marks them as SLA violated and notifies super admins.
+    and runs a multi-tier SLA escalation check (24h, 48h, 72h).
     """
     import datetime
-    from app.models import Ticket, TicketAttachment, User
+    from app.models import Ticket, TicketAttachment, User, Notification, Department
     from app.email_utils import send_mock_email
     
-    print("Running SLA violation check...")
+    print("Running multi-tier SLA violation check...")
     db = SessionLocal()
     try:
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
+        now = datetime.datetime.utcnow()
         
-        # Find tickets where proof was requested > 24h ago but no proof uploaded
+        # Find all resolved tickets that have a proof request outstanding
         candidates = db.query(Ticket).filter(
             Ticket.proof_requested_at.isnot(None),
-            Ticket.proof_requested_at <= cutoff,
-            Ticket.sla_violated == False,
             Ticket.status == "resolved"
         ).all()
         
-        violated_count = 0
+        escalated_count = 0
         for ticket in candidates:
             # Check if proof was uploaded since request
             proof_exists = db.query(TicketAttachment).filter(
@@ -117,27 +114,119 @@ def check_sla_violations():
                 TicketAttachment.is_proof == True
             ).first()
             
-            if not proof_exists:
-                ticket.sla_violated = True
-                violated_count += 1
-                print(f"SLA VIOLATION: Ticket #{ticket.id} - '{ticket.title}' - proof not provided within 24 hours")
+            if proof_exists:
+                continue
+                
+            # Proof not provided yet, calculate elapsed time
+            hours_elapsed = (now - ticket.proof_requested_at).total_seconds() / 3600.0
+            
+            # --- Tier 1 (24 - 48 Hours) ---
+            if hours_elapsed >= 24.0 and hours_elapsed < 48.0:
+                if not ticket.sla_violated:
+                    ticket.sla_violated = True
+                    escalated_count += 1
+                    print(f"SLA Tier 1 Violation: Ticket #{ticket.id} ('{ticket.title}')")
+                    
+                    # Notify department admins
+                    dept_admins = db.query(User).filter(
+                        User.role == "dept_admin",
+                        User.department_id == ticket.assigned_department_id
+                    ).all()
+                    
+                    for admin in dept_admins:
+                        notif = Notification(
+                            user_id=admin.id,
+                            ticket_id=ticket.id,
+                            category="sla_alert",
+                            message=f"SLA Violation Warning: Ticket #{ticket.id} ('{ticket.title}') resolved but lacks proof. Provide proof immediately to avoid supervisor escalation."
+                        )
+                        db.add(notif)
+                        
+                        send_mock_email(
+                            admin.email,
+                            f"SLA Warning Notice: Ticket #{ticket.id}",
+                            f"Hello {admin.name},\n\nTicket #{ticket.id} ('{ticket.title}') has exceeded the 24-hour window for providing resolution proof.\n\nPlease upload proof immediately to avoid escalation to central supervisors."
+                        )
+            
+            # --- Tier 2 (48 - 72 Hours) ---
+            elif hours_elapsed >= 48.0 and hours_elapsed < 72.0:
+                # Check if Tier 2 notification was already sent to avoid duplicate spamming
+                tier2_sent = db.query(Notification).filter(
+                    Notification.ticket_id == ticket.id,
+                    Notification.message.like("%Escalation Tier 2%")
+                ).first()
+                
+                if not tier2_sent:
+                    escalated_count += 1
+                    print(f"SLA Tier 2 Escalation: Ticket #{ticket.id} ('{ticket.title}')")
+                    
+                    # Notify all super admins
+                    super_admins = db.query(User).filter(User.role == "super_admin").all()
+                    for sa in super_admins:
+                        notif = Notification(
+                            user_id=sa.id,
+                            ticket_id=ticket.id,
+                            category="sla_alert",
+                            message=f"SLA Escalation Tier 2: Ticket #{ticket.id} ('{ticket.title}') has been in breach for over 48 hours."
+                        )
+                        db.add(notif)
+                        
+                        send_mock_email(
+                            sa.email,
+                            f"SLA Escalation Tier 2 Alert - Ticket #{ticket.id}",
+                            f"Hello {sa.name},\n\nTicket #{ticket.id} ('{ticket.title}') has been in SLA violation state for over 48 hours without resolution proof.\n\nPlease review supervisor actions."
+                        )
+            
+            # --- Tier 3 (>= 72 Hours) ---
+            elif hours_elapsed >= 72.0:
+                # Check if Tier 3 notification was already sent
+                tier3_sent = db.query(Notification).filter(
+                    Notification.ticket_id == ticket.id,
+                    Notification.category == "compliance_audit",
+                    Notification.message.like("%SLA Escalation Tier 3%")
+                ).first()
+                
+                if not tier3_sent:
+                    escalated_count += 1
+                    print(f"SLA Tier 3 Critical Escalation: Ticket #{ticket.id} ('{ticket.title}')")
+                    
+                    # Notify all super admins under compliance_audit category
+                    super_admins = db.query(User).filter(User.role == "super_admin").all()
+                    for sa in super_admins:
+                        notif = Notification(
+                            user_id=sa.id,
+                            ticket_id=ticket.id,
+                            category="compliance_audit",
+                            message=f"SLA Escalation Tier 3 CRITICAL: Ticket #{ticket.id} ('{ticket.title}') in breach for over 72 hours. Department failed to respond."
+                        )
+                        db.add(notif)
+                        
+                    # Notify department admins under compliance_audit category
+                    dept_admins = db.query(User).filter(
+                        User.role == "dept_admin",
+                        User.department_id == ticket.assigned_department_id
+                    ).all()
+                    for da in dept_admins:
+                        notif = Notification(
+                            user_id=da.id,
+                            ticket_id=ticket.id,
+                            category="compliance_audit",
+                            message=f"SLA Escalation Tier 3 CRITICAL: Ticket #{ticket.id} ('{ticket.title}') in breach for over 72 hours. Official warning logged."
+                        )
+                        db.add(notif)
+                        
+                        send_mock_email(
+                            da.email,
+                            f"CRITICAL COMPLIANCE NOTICE: Ticket #{ticket.id}",
+                            f"Hello {da.name},\n\nYour department has failed to provide resolution proof for Ticket #{ticket.id} for over 72 hours.\n\nThis critical violation has been logged to the compliance registry."
+                        )
         
-        if violated_count > 0:
+        if escalated_count > 0:
             db.commit()
-            
-            # Alert all super admins
-            super_admins = db.query(User).filter(User.role == "super_admin").all()
-            for admin in super_admins:
-                send_mock_email(
-                    admin.email,
-                    f"SLA Alert: {violated_count} New Violation(s) Detected",
-                    f"Hello {admin.name},\n\n{violated_count} ticket(s) have exceeded the 24-hour SLA window for providing resolution proof.\n\nPlease review the SLA Violations panel in your dashboard and take appropriate action.\n\nE-Governance Helpdesk Administration"
-                )
-            
-            print(f"SLA check complete: {violated_count} new violations detected and escalated.")
+            print(f"SLA check complete: {escalated_count} tickets escalated/updated.")
         else:
-            print("SLA check complete: No new violations found.")
-        
+            print("SLA check complete: No new escalations needed.")
+            
     except Exception as e:
         db.rollback()
         print(f"Error during SLA violation check: {e}")

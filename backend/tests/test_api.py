@@ -408,3 +408,46 @@ def test_public_proof():
     assert data["remarks"] == "Everything is fixed."
     assert len(data["attachments"]) == 1
     assert data["attachments"][0]["is_proof"] is True
+
+def test_post_ticket_clarification_no_files():
+    response = client.post(
+        f"/api/tickets/{ticket_id_val}/clarifications",
+        data={
+            "message": "Clarification message text"
+        },
+        headers={"Authorization": f"Bearer {dept_admin_token}"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert "clarification_id" in data
+
+def test_csat_and_pdf_export_endpoints():
+    login_response = client.post(
+        "/api/auth/login",
+        data={
+            "username": "admin_test@egov.gov.np",
+            "password": "password123"
+        }
+    )
+    assert login_response.status_code == 200
+    super_admin_token = login_response.json()["access_token"]
+    
+    # 1. Test CSAT metrics endpoint
+    csat_resp = client.get(
+        "/api/telemetry/csat",
+        headers={"Authorization": f"Bearer {super_admin_token}"}
+    )
+    assert csat_resp.status_code == 200
+    csat_data = csat_resp.json()
+    assert isinstance(csat_data, list)
+    
+    # 2. Test PDF export endpoint
+    pdf_resp = client.get(
+        "/api/telemetry/export-pdf",
+        headers={"Authorization": f"Bearer {super_admin_token}"}
+    )
+    assert pdf_resp.status_code == 200
+    assert pdf_resp.headers["content-type"] == "application/pdf"
+    assert len(pdf_resp.content) > 0
+

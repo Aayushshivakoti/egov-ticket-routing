@@ -254,3 +254,105 @@ def test_field_reports_and_re_evaluation():
     )
     assert response.status_code == 200
     assert response.json()["status"] == "Under Re-evaluation"
+
+def test_multi_tier_sla_violations():
+    from app.tasks import check_sla_violations
+    from app.models import Notification
+    import datetime
+    
+    db = TestingSessionLocal()
+    
+    # Patch SessionLocal in tasks module to use TestingSessionLocal
+    import app.tasks
+    original_session_local = app.tasks.SessionLocal
+    app.tasks.SessionLocal = TestingSessionLocal
+    
+    try:
+        now = datetime.datetime.utcnow()
+        
+        # Create test tickets
+        # Ticket A: proof requested 25 hours ago (Tier 1)
+        ticket_a = Ticket(
+            id=101,
+            citizen_id=3,
+            title="Tier 1 SLA Breach",
+            description="Tier 1",
+            status="resolved",
+            assigned_department_id=1,
+            proof_requested_at=now - datetime.timedelta(hours=25),
+            sla_violated=False
+        )
+        
+        # Ticket B: proof requested 49 hours ago (Tier 2)
+        ticket_b = Ticket(
+            id=102,
+            citizen_id=3,
+            title="Tier 2 SLA Breach",
+            description="Tier 2",
+            status="resolved",
+            assigned_department_id=1,
+            proof_requested_at=now - datetime.timedelta(hours=49),
+            sla_violated=True
+        )
+        
+        # Ticket C: proof requested 73 hours ago (Tier 3)
+        ticket_c = Ticket(
+            id=103,
+            citizen_id=3,
+            title="Tier 3 SLA Breach",
+            description="Tier 3",
+            status="resolved",
+            assigned_department_id=1,
+            proof_requested_at=now - datetime.timedelta(hours=73),
+            sla_violated=True
+        )
+        
+        db.add_all([ticket_a, ticket_b, ticket_c])
+        db.commit()
+        
+        # Clear existing notifications
+        db.query(Notification).delete()
+        db.commit()
+        
+        # Run periodic check task
+        check_sla_violations()
+        
+        # Refresh and verify
+        db.refresh(ticket_a)
+        db.refresh(ticket_b)
+        db.refresh(ticket_c)
+        
+        assert ticket_a.sla_violated is True
+        
+        # Verify Tier 1 notification for dept head (user_id 3)
+        notif_t1 = db.query(Notification).filter(
+            Notification.ticket_id == 101,
+            Notification.category == "sla_alert",
+            Notification.message.like("%Warning%")
+        ).first()
+        assert notif_t1 is not None
+        assert notif_t1.user_id == 3
+        
+        # Verify Tier 2 notification for super admin (user_id 1)
+        notif_t2 = db.query(Notification).filter(
+            Notification.ticket_id == 102,
+            Notification.category == "sla_alert",
+            Notification.message.like("%Tier 2%")
+        ).first()
+        assert notif_t2 is not None
+        assert notif_t2.user_id == 1
+        
+        # Verify Tier 3 compliance audit logs for both roles
+        notifs_t3 = db.query(Notification).filter(
+            Notification.ticket_id == 103,
+            Notification.category == "compliance_audit"
+        ).all()
+        assert len(notifs_t3) >= 2
+        
+    finally:
+        # Clean up database records
+        db.query(Ticket).filter(Ticket.id.in_([101, 102, 103])).delete()
+        db.query(Notification).delete()
+        db.commit()
+        db.close()
+        app.tasks.SessionLocal = original_session_local

@@ -16,6 +16,11 @@ def seed_db():
     
     db: Session = SessionLocal()
     try:
+        # Check if database is already seeded to preserve old data
+        if db.query(Department).count() > 0 or db.query(User).count() > 0:
+            print("Database is already initialized and seeded. Skipping to preserve existing/old data.")
+            return
+
         # Clear existing data in reverse order of dependencies
         print("Clearing existing data...")
         db.query(Ticket).delete()

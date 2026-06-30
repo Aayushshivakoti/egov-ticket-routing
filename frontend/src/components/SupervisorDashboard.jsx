@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import { Chart, registerables } from 'chart.js';
-import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send, FileSearch, Bell } from 'lucide-react';
+import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send, FileSearch, Bell, FileDown } from 'lucide-react';
 import ProofRequestsView from './ProofRequestsView';
 import ClarificationModal from './ClarificationModal';
 
@@ -11,6 +11,43 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
   const [telemetry, setTelemetry] = useState(null);
   const [loadingTelemetry, setLoadingTelemetry] = useState(true);
   const [selectedClarificationTicket, setSelectedClarificationTicket] = useState(null);
+  
+  // CSAT state & refs
+  const [csatMetrics, setCsatMetrics] = useState([]);
+  const [loadingCsat, setLoadingCsat] = useState(true);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const csatChartRef = useRef(null);
+  const csatChartInst = useRef(null);
+
+  const handleDownloadPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const response = await api.get('/telemetry/export-pdf', {
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.download = 'egov_grievance_summary.pdf';
+      link.click();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to download PDF summary report.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const fetchCsatMetrics = async () => {
+    try {
+      const response = await api.get('/telemetry/csat');
+      setCsatMetrics(response.data);
+    } catch (err) {
+      console.error("Failed to load CSAT metrics:", err);
+    } finally {
+      setLoadingCsat(false);
+    }
+  };
 
   // Department creation form state
   const [deptName, setDeptName] = useState('');
@@ -259,6 +296,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
     fetchSlaViolations();
     fetchPendingChanges();
     fetchAuditLog();
+    fetchCsatMetrics();
   }, [tickets]);
 
   const fetchSlaViolations = async () => {
@@ -380,6 +418,52 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
       if (confusionChartInst.current) confusionChartInst.current.destroy();
     };
   }, [telemetry]);
+
+  useEffect(() => {
+    if (csatMetrics.length === 0) return;
+    
+    if (csatChartRef.current) {
+      if (csatChartInst.current) csatChartInst.current.destroy();
+      
+      csatChartInst.current = new Chart(csatChartRef.current, {
+        type: 'bar',
+        data: {
+          labels: csatMetrics.map(d => d.department_name.split(' ')[0]),
+          datasets: [{
+            label: 'CSAT Score (%)',
+            data: csatMetrics.map(d => d.csat_score),
+            backgroundColor: 'rgba(59, 130, 246, 0.45)',
+            borderColor: '#3b82f6',
+            borderWidth: 1.5,
+            borderRadius: 8,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              min: 0,
+              max: 100,
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#64748b', font: { size: 9 } }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#64748b', font: { size: 9 } }
+            }
+          },
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+    }
+
+    return () => {
+      if (csatChartInst.current) csatChartInst.current.destroy();
+    };
+  }, [csatMetrics]);
 
   // Calculate standard stats counts
   const getDeptCounts = () => {
@@ -554,11 +638,22 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
       {/* Telemetry Dashboard Row */}
       {telemetry && (
         <section className="space-y-6">
-          <div className="flex items-center gap-2 border-b border-slate-900 pb-3">
-            <Cpu className="w-5 h-5 text-purple-400" />
-            <h2 className="text-lg font-black bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent uppercase tracking-wider">
-              Explainable AI (XAI) & Pipeline Telemetry
-            </h2>
+          <div className="flex items-center justify-between border-b border-slate-900 pb-3">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-5 h-5 text-purple-400" />
+              <h2 className="text-lg font-black bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent uppercase tracking-wider">
+                Explainable AI (XAI) & Pipeline Telemetry
+              </h2>
+            </div>
+            
+            <button
+              onClick={handleDownloadPdf}
+              disabled={exportingPdf}
+              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <FileDown className="w-4 h-4" />
+              {exportingPdf ? 'Exporting PDF...' : 'Download Executive PDF'}
+            </button>
           </div>
 
           {/* Quick Metrics Cards */}
@@ -620,6 +715,21 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
               <span className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 block">AI Class Confusion Distribution</span>
               <div className="h-64 relative flex-1">
                 <canvas ref={confusionChartRef}></canvas>
+              </div>
+            </div>
+
+            {/* Citizen Satisfaction (CSAT) Breakdown */}
+            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 block">Citizen Satisfaction Score (CSAT) per Department</span>
+              <div className="h-64 relative flex-1">
+                {loadingCsat ? (
+                  <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-xs bg-slate-900">
+                    <Loader className="w-5 h-5 animate-spin text-blue-500 mr-2" />
+                    Loading CSAT ratings...
+                  </div>
+                ) : (
+                  <canvas ref={csatChartRef}></canvas>
+                )}
               </div>
             </div>
 
