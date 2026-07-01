@@ -364,7 +364,7 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
               disabled={submitting}
               className="w-full py-3 bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-500 hover:to-blue-500 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-500/10 disabled:opacity-50 cursor-pointer"
             >
-              {submitting ? 'Auto Routing...' : 'Dispatch Ticket'}
+              {submitting ? 'Auto Routing...' : 'File Report'}
             </button>
           </form>
         </div>
