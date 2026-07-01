@@ -173,6 +173,8 @@ const Dashboard = () => {
     return '';
   };
 
+  const isChatView = window.location.pathname.endsWith('/chats');
+
   const renderDashboardByRole = () => {
     if (user.role === 'super_admin') {
       return (
@@ -184,6 +186,7 @@ const Dashboard = () => {
           getStatusBadge={getStatusBadge}
           getDepartmentName={getDepartmentName}
           statusFilter={status}
+          view={isChatView ? 'chats' : 'overview'}
         />
       );
     } else if (user.role === 'dept_admin') {
@@ -195,6 +198,7 @@ const Dashboard = () => {
           getStatusBadge={getStatusBadge}
           getDepartmentName={getDepartmentName}
           statusFilter={status}
+          view={isChatView ? 'chats' : 'overview'}
         />
       );
     } else {
@@ -248,47 +252,49 @@ const Dashboard = () => {
           )}
 
           {/* Global Summary Stats Card Grid as Navigation Tabs */}
-          <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <NavLink 
-              to="/admin/reports/total" 
-              className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
-            >
-              <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Reports</p>
-                <h3 className="text-2xl font-black mt-1 text-slate-200" id="stat-total">{stats.total}</h3>
-              </div>
-            </NavLink>
+          {!isChatView && (
+            <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <NavLink 
+                to="/admin/reports/total" 
+                className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
+              >
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Reports</p>
+                  <h3 className="text-2xl font-black mt-1 text-slate-200" id="stat-total">{stats.total}</h3>
+                </div>
+              </NavLink>
 
-            <NavLink 
-              to="/admin/reports/pending" 
-              className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-yellow-500 shadow-lg shadow-yellow-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
-            >
-              <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pending Assign</p>
-                <h3 className="text-2xl font-black mt-1 text-yellow-400" id="stat-pending">{stats.pending}</h3>
-              </div>
-            </NavLink>
+              <NavLink 
+                to="/admin/reports/pending" 
+                className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-yellow-500 shadow-lg shadow-yellow-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
+              >
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pending Assign</p>
+                  <h3 className="text-2xl font-black mt-1 text-yellow-400" id="stat-pending">{stats.pending}</h3>
+                </div>
+              </NavLink>
 
-            <NavLink 
-              to="/admin/reports/in-progress" 
-              className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-blue-500 shadow-lg shadow-blue-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
-            >
-              <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">In Progress</p>
-                <h3 className="text-2xl font-black mt-1 text-blue-400" id="stat-progress">{stats.in_progress}</h3>
-              </div>
-            </NavLink>
+              <NavLink 
+                to="/admin/reports/in-progress" 
+                className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-blue-500 shadow-lg shadow-blue-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
+              >
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">In Progress</p>
+                  <h3 className="text-2xl font-black mt-1 text-blue-400" id="stat-progress">{stats.in_progress}</h3>
+                </div>
+              </NavLink>
 
-            <NavLink 
-              to="/admin/reports/resolved" 
-              className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-emerald-500 shadow-lg shadow-emerald-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
-            >
-              <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Resolved</p>
-                <h3 className="text-2xl font-black mt-1 text-emerald-400" id="stat-resolved">{stats.resolved}</h3>
-              </div>
-            </NavLink>
-          </section>
+              <NavLink 
+                to="/admin/reports/resolved" 
+                className={({ isActive }) => `p-5 border rounded-2xl flex items-center justify-between transition-colors ${isActive ? 'bg-slate-800 border-emerald-500 shadow-lg shadow-emerald-900/20' : 'bg-slate-900 border-slate-800/80 hover:bg-slate-800/50'}`}
+              >
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Resolved</p>
+                  <h3 className="text-2xl font-black mt-1 text-emerald-400" id="stat-resolved">{stats.resolved}</h3>
+                </div>
+              </NavLink>
+            </section>
+          )}
 
           {/* Loading state indicator */}
           {loading ? (

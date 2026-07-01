@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, FileText, AlertCircle, Play, CheckCircle2, 
-  LogOut, Cpu, User, Map
+  LogOut, Cpu, User, Map, MessageSquare
 } from 'lucide-react';
 
 const Sidebar = ({ user, logout }) => {
@@ -13,6 +13,10 @@ const Sidebar = ({ user, logout }) => {
     { name: 'In Progress', path: '/admin/reports/in-progress', icon: Play, color: 'text-blue-400' },
     { name: 'Resolved', path: '/admin/reports/resolved', icon: CheckCircle2, color: 'text-emerald-400' },
   ];
+
+  if (user?.role === 'super_admin' || user?.dept_role === 'Department Head') {
+    menuItems.push({ name: 'Live Support Chat', path: '/admin/chats', icon: MessageSquare, color: 'text-indigo-400' });
+  }
 
   return (
     <aside className="w-64 bg-slate-900/60 border-r border-slate-800 backdrop-blur-md flex flex-col justify-between h-screen sticky top-0 shrink-0 z-30 select-none">

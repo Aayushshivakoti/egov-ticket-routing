@@ -1137,6 +1137,14 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route 
+            path="/admin/chats" 
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
         </Routes>
       </Router>
     </AuthProvider>
