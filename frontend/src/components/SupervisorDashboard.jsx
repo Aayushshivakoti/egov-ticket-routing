@@ -896,6 +896,410 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
     );
   }
 
+  if (view === 'departments') {
+    return (
+      <div className="space-y-8">
+        {/* Entity Administration and Provisioning Section */}
+        <section className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          {/* Create Custom Department Entity */}
+          <div className="xl:col-span-1 p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-blue-400" />
+                <h2 className="font-extrabold text-lg text-slate-200" id="supervisor-dept-title">Create Custom Department</h2>
+              </div>
+              <p className="text-xs text-slate-400 leading-normal">
+                Register new municipal or administrative departments to expand routing destinations for civic complaints.
+              </p>
+              {deptError && (
+                <div className="p-3.5 bg-rose-955/40 border border-rose-800/60 text-rose-350 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
+                  <ShieldAlert className="w-4 h-4 text-rose-455" />
+                  {deptError}
+                </div>
+              )}
+              {deptSuccess && (
+                <div className="p-3.5 bg-emerald-955/40 border border-emerald-800/60 text-emerald-350 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-455" />
+                  {deptSuccess}
+                </div>
+              )}
+              <form onSubmit={handleCreateDept} className="space-y-3 pt-2" id="create-dept-form">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Department Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={newDeptName}
+                    onChange={(e) => setNewDeptName(e.target.value)}
+                    placeholder="e.g. Sanitation Department"
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Description</label>
+                  <textarea
+                    required
+                    rows="3"
+                    value={newDeptDesc}
+                    onChange={(e) => setNewDeptDesc(e.target.value)}
+                    placeholder="Brief description of department scope..."
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-855 rounded-lg text-slate-200 placeholder-slate-705 text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Threshold confidence</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0.0"
+                    max="1.0"
+                    required
+                    value={newDeptThreshold}
+                    onChange={(e) => setNewDeptThreshold(parseFloat(e.target.value))}
+                    placeholder="e.g. 0.70"
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={creatingDept}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  {creatingDept ? 'Creating...' : 'Create Department'}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Advanced Staff Management & Access Control (Dual-Pane) */}
+          <div className="xl:col-span-2 p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-855 pb-3">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-emerald-400" />
+                  <h2 className="font-extrabold text-lg text-slate-200" id="supervisor-personnel-title">Department Personnel & Access</h2>
+                </div>
+                <span className="text-xs text-slate-505 font-bold uppercase tracking-wide">Staff Management</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Left Panel: Active Departments */}
+                <div className="md:col-span-1 space-y-2 border-r border-slate-850 pr-4">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-3 block">Select Department</p>
+                  <div className="space-y-1.5 overflow-y-auto max-h-80">
+                    {departments.map((dept) => {
+                      const isSelected = selectedDeptId === dept.id;
+                      return (
+                        <div
+                          key={dept.id}
+                          onClick={() => handleSelectDept(dept.id)}
+                          className={`p-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-955/20 border-blue-500/50 text-blue-400 shadow-md shadow-blue-500/5'
+                              : 'bg-transparent border-transparent hover:bg-slate-950/50 hover:border-slate-855'
+                          }`}
+                        >
+                          {dept.name}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Right Panel: Staff Members List */}
+                <div className="md:col-span-2 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Staff Listing for {getDepartmentName(selectedDeptId)}
+                    </p>
+                    {selectedDeptId && (
+                      <button
+                        onClick={() => {
+                          setEmployeeError('');
+                          setEmployeeSuccess('');
+                          setNewEmployeeName('');
+                          setNewEmployeeEmail('');
+                          setNewEmployeePassword('');
+                          setNewEmployeeIdOrPassport('');
+                          setNewEmployeeRole('');
+                          setIsEmployeeModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition-all shadow-md shadow-emerald-500/10 cursor-pointer flex items-center gap-1"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" /> Add Staff
+                      </button>
+                    )}
+                  </div>
+
+                  {loadingEmployees ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-500 gap-2">
+                      <Loader className="w-4 h-4 animate-spin text-blue-500" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Loading Personnel...</span>
+                    </div>
+                  ) : !selectedDeptId ? (
+                    <div className="p-8 text-center text-slate-600 text-xs font-semibold">
+                      Please select a department from the left panel to manage active personnel.
+                    </div>
+                  ) : employees.length === 0 ? (
+                    <div className="p-8 text-center text-slate-600 text-xs font-semibold border border-dashed border-slate-805 rounded-xl">
+                      No active personnel registered for this department. Click 'Add Staff' to register an administrator.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-slate-850 rounded-xl">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-850 bg-slate-950/40 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                            <th className="py-2.5 px-3">Name</th>
+                            <th className="py-2.5 px-3">Role</th>
+                            <th className="py-2.5 px-3 text-right">Access</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-855/60 text-xs">
+                          {employees.map((emp) => (
+                            <tr key={emp.id} className="hover:bg-slate-950/10">
+                              <td className="py-3 px-3">
+                                <p className="font-semibold text-slate-200">{emp.name}</p>
+                                <p className="text-[9px] text-slate-550 font-mono">{emp.email}</p>
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-full bg-slate-850 text-slate-400">
+                                  {emp.dept_role || 'No Role'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {/* Suspend/Reactivate Toggle */}
+                                  <button
+                                    onClick={() => handleToggleSuspend(emp)}
+                                    className={`p-1.5 border rounded-lg transition-all ${
+                                      emp.status === 'suspended'
+                                        ? 'bg-emerald-950/20 border-emerald-900/30 text-emerald-455 hover:bg-emerald-900/20'
+                                        : 'bg-rose-955/20 border-rose-900/30 text-rose-455 hover:bg-rose-900/20'
+                                    }`}
+                                    title={emp.status === 'suspended' ? 'Reactivate Login' : 'Suspend Account'}
+                                  >
+                                    {emp.status === 'suspended' ? (
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <UserMinus className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+
+                                  {/* Transfer Department */}
+                                  <button
+                                    onClick={() => {
+                                      setSelectedEmployee(emp);
+                                      setTransferTargetDeptId(emp.department_id || '');
+                                      setIsTransferModalOpen(true);
+                                    }}
+                                    className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 rounded-lg transition-all"
+                                    title="Transfer Department"
+                                  >
+                                    <FolderSync className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  {/* Remove Account */}
+                                  <button
+                                    onClick={() => handleRemoveEmployee(emp.id)}
+                                    className="p-1.5 bg-slate-900 hover:bg-rose-955/40 border border-slate-800 text-slate-450 hover:text-rose-450 rounded-lg transition-all"
+                                    title="Delete Employee"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Add Employee Modal Overlay */}
+        {isEmployeeModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-955/80 backdrop-blur-sm">
+            <div className="bg-slate-900 border border-slate-805 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl relative">
+              <button
+                onClick={() => setIsEmployeeModalOpen(false)}
+                className="absolute top-4 right-4 p-1.5 bg-slate-955/50 hover:bg-slate-955 text-slate-405 hover:text-slate-105 rounded-lg border border-slate-850"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="p-6 space-y-4">
+                <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-emerald-450" /> Add New Employee
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Provision a new Departmental Admin account for **{getDepartmentName(selectedDeptId)}**.
+                </p>
+
+                {employeeError && (
+                  <div className="p-3 bg-rose-955/30 border border-rose-900/50 text-rose-450 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
+                    <ShieldAlert className="w-4 h-4" /> {employeeError}
+                  </div>
+                )}
+                {employeeSuccess && (
+                  <div className="p-3 bg-emerald-955/30 border border-emerald-900/50 text-emerald-450 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
+                    <CheckCircle2 className="w-4 h-4" /> {employeeSuccess}
+                  </div>
+                )}
+
+                <form onSubmit={handleAddEmployee} className="space-y-3.5">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={newEmployeeName}
+                      onChange={(e) => setNewEmployeeName(e.target.value)}
+                      placeholder="e.g. Sabin Shrestha"
+                      className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      value={newEmployeeEmail}
+                      onChange={(e) => setNewEmployeeEmail(e.target.value)}
+                      placeholder="sabin@egov.gov.np"
+                      className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Password</label>
+                    <input
+                      type="password"
+                      required
+                      value={newEmployeePassword}
+                      onChange={(e) => setNewEmployeePassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-3.5 py-2 bg-slate-955 border border-slate-855 rounded-lg text-slate-200 placeholder-slate-705 text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Employee ID / Passport</label>
+                    <input
+                      type="text"
+                      required
+                      value={newEmployeeIdOrPassport}
+                      onChange={(e) => setNewEmployeeIdOrPassport(e.target.value)}
+                      placeholder="e.g. EMP-98273"
+                      className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-550 mb-1">Department Role</label>
+                    <select
+                      value={newEmployeeRole}
+                      onChange={(e) => setNewEmployeeRole(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-blue-500 font-semibold"
+                    >
+                      <option value="">Select Role (Optional)</option>
+                      <option value="Department Head">Department Head</option>
+                      <option value="Field Operator">Field Operator</option>
+                      <option value="Support Rep">Support Rep</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEmployeeModalOpen(false)}
+                      className="px-4 py-2 bg-slate-955 border border-slate-850 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-bold transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-emerald-500/10"
+                    >
+                      Add Employee
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Transfer Department Modal Overlay */}
+        {isTransferModalOpen && selectedEmployee && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-955/80 backdrop-blur-sm">
+            <div className="bg-slate-900 border border-slate-805 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl relative">
+              <button
+                onClick={() => {
+                  setIsTransferModalOpen(false);
+                  setSelectedEmployee(null);
+                }}
+                className="absolute top-4 right-4 p-1.5 bg-slate-955/50 hover:bg-slate-955 text-slate-400 hover:text-slate-100 rounded-lg border border-slate-850"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="p-6 space-y-4">
+                <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                  <FolderSync className="w-5 h-5 text-blue-400" /> Transfer Employee
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Select target department to route employee **{selectedEmployee.name}** and immediately revoke access to previous resources.
+                </p>
+
+                {transferError && (
+                  <div className="p-3 bg-rose-955/30 border border-rose-900/50 text-rose-455 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
+                    <ShieldAlert className="w-4 h-4 animate-pulse" /> {transferError}
+                  </div>
+                )}
+
+                <form onSubmit={handleTransferEmployee} className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Department</label>
+                    <select
+                      required
+                      value={transferTargetDeptId}
+                      onChange={(e) => setTransferTargetDeptId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 text-xs font-semibold"
+                    >
+                      <option value="">Select Department...</option>
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsTransferModalOpen(false);
+                        setSelectedEmployee(null);
+                      }}
+                      className="px-4 py-2 bg-slate-955 border border-slate-850 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-bold transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/10"
+                    >
+                      Transfer
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
 
@@ -1518,9 +1922,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
       </section>
 
       {/* Entity Administration and Provisioning Section */}
-      {view === 'overview' && (
-        <>
-          <section className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      <section className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Create Custom Department Entity */}
         <div className="xl:col-span-1 p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between">
           <div className="space-y-4">
@@ -1928,8 +2330,6 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
           </div>
         </div>
       )}
-    </>
-  )}
 
       {/* SLA Violations Panel */}
       <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
