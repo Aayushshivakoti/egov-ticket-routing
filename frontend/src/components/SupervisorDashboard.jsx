@@ -1518,7 +1518,9 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
       </section>
 
       {/* Entity Administration and Provisioning Section */}
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      {view === 'overview' && (
+        <>
+          <section className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Create Custom Department Entity */}
         <div className="xl:col-span-1 p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between">
           <div className="space-y-4">
@@ -1926,6 +1928,8 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
           </div>
         </div>
       )}
+    </>
+  )}
 
       {/* SLA Violations Panel */}
       <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">

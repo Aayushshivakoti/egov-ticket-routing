@@ -174,6 +174,7 @@ const Dashboard = () => {
   };
 
   const isChatView = window.location.pathname.endsWith('/chats');
+  const isDeptsView = window.location.pathname.endsWith('/departments');
 
   const renderDashboardByRole = () => {
     if (user.role === 'super_admin') {
@@ -186,7 +187,7 @@ const Dashboard = () => {
           getStatusBadge={getStatusBadge}
           getDepartmentName={getDepartmentName}
           statusFilter={status}
-          view={isChatView ? 'chats' : 'overview'}
+          view={isChatView ? 'chats' : (isDeptsView ? 'departments' : 'overview')}
         />
       );
     } else if (user.role === 'dept_admin') {
@@ -252,7 +253,7 @@ const Dashboard = () => {
           )}
 
           {/* Global Summary Stats Card Grid as Navigation Tabs */}
-          {!isChatView && (
+          {!isChatView && !isDeptsView && (
             <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <NavLink 
                 to="/admin/reports/total" 

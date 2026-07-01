@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, FileText, AlertCircle, Play, CheckCircle2, 
-  LogOut, Cpu, User, Map, MessageSquare
+  LogOut, Cpu, User, Map, MessageSquare, Building2
 } from 'lucide-react';
 
 const Sidebar = ({ user, logout }) => {
@@ -16,6 +16,10 @@ const Sidebar = ({ user, logout }) => {
 
   if (user?.role === 'super_admin' || user?.dept_role === 'Department Head') {
     menuItems.push({ name: 'Live Support Chat', path: '/admin/chats', icon: MessageSquare, color: 'text-indigo-400' });
+  }
+
+  if (user?.role === 'super_admin') {
+    menuItems.push({ name: 'Departments & Staff', path: '/admin/departments', icon: Building2, color: 'text-teal-400' });
   }
 
   return (
