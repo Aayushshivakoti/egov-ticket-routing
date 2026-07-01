@@ -920,6 +920,21 @@ def get_public_ticket_proof(ticket_id: int, db: Session = Depends(get_db)):
         "attachments": attachments_data
     }
 
+@router.get("/public/{ticket_id}")
+def get_public_ticket_status(ticket_id: int, db: Session = Depends(get_db)):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+        
+    return {
+        "id": ticket.id,
+        "title": ticket.title,
+        "status": ticket.status,
+        "assigned_department_id": ticket.assigned_department_id,
+        "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+        "updated_at": ticket.updated_at.isoformat() if ticket.updated_at else None
+    }
+
 @router.post("/{ticket_id}/request-proof")
 def request_proof(
     ticket_id: int,

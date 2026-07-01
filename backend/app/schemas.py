@@ -144,3 +144,32 @@ class PendingRoleChangeResponse(BaseConfigModel):
     created_at: datetime
     user: Optional[UserResponse] = None
 
+
+# --- Chat Schemas ---
+class ChatMessageBase(BaseModel):
+    message: str
+
+class ChatMessageCreate(ChatMessageBase):
+    pass
+
+class ChatMessageResponse(ChatMessageBase, BaseConfigModel):
+    id: int
+    chat_session_id: int
+    sender_role: str
+    sender_name: str
+    timestamp: datetime
+
+class ChatSessionCreate(BaseModel):
+    citizen_name: str
+
+class ChatSessionResponse(BaseConfigModel):
+    id: int
+    session_token: str
+    citizen_name: str
+    status: str
+    assigned_department_id: Optional[int] = None
+    associated_ticket_id: Optional[int] = None
+    created_at: datetime
+    messages: List[ChatMessageResponse] = []
+
+

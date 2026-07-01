@@ -4,10 +4,11 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import AllGrievances from './pages/AllGrievances';
 import api from './services/api';
+import TicketTimeline from './components/TicketTimeline';
 import { 
   Cpu, Loader, Shield, FileSpreadsheet, Sparkles, X, Mail, Lock, 
   AlertCircle, CheckCircle2, User, ArrowRight, ArrowLeft, Eye, 
-  Building2, Users, FileText, ExternalLink, Clock, Send
+  Building2, Users, FileText, ExternalLink, Clock, Send, MessageSquare
 } from 'lucide-react';
 
 const LandingPage = () => {
@@ -27,6 +28,100 @@ const LandingPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState('home'); // 'home' or 'all-grievances'
   const [requestingProof, setRequestingProof] = useState(null);
+  
+  // Public Tracking & Chat Hooks
+  const [trackedTicket, setTrackedTicket] = useState(null);
+  const [trackingModalOpen, setTrackingModalOpen] = useState(false);
+  const [loadingTracking, setLoadingTracking] = useState(false);
+  const [trackingSearchId, setTrackingSearchId] = useState('');
+
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatStarted, setChatStarted] = useState(false);
+  const [citizenName, setCitizenName] = useState('');
+  const [chatSessionToken, setChatSessionToken] = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+
+  // Auto-load active chat session if it exists in local storage
+  useEffect(() => {
+    const token = localStorage.getItem('egov_chat_token');
+    const name = localStorage.getItem('egov_chat_name');
+    if (token && name) {
+      setChatSessionToken(token);
+      setCitizenName(name);
+      setChatStarted(true);
+      fetchChatHistory(token);
+    }
+  }, []);
+
+  const fetchChatHistory = async (token) => {
+    try {
+      const res = await api.get(`/chat/${token}/messages`);
+      setChatMessages(res.data);
+    } catch (err) {
+      console.error("Failed to load chat history:", err);
+      localStorage.removeItem('egov_chat_token');
+      localStorage.removeItem('egov_chat_name');
+      setChatStarted(false);
+    }
+  };
+
+  useEffect(() => {
+    let interval;
+    if (chatOpen && chatSessionToken) {
+      fetchChatHistory(chatSessionToken);
+      interval = setInterval(() => {
+        fetchChatHistory(chatSessionToken);
+      }, 4000);
+    }
+    return () => clearInterval(interval);
+  }, [chatOpen, chatSessionToken]);
+
+  const handleStartChat = async (e) => {
+    e.preventDefault();
+    if (!citizenName.trim()) return;
+    try {
+      const res = await api.post('/chat/start', { citizen_name: citizenName });
+      const { session_token } = res.data;
+      localStorage.setItem('egov_chat_token', session_token);
+      localStorage.setItem('egov_chat_name', citizenName);
+      setChatSessionToken(session_token);
+      setChatStarted(true);
+      setChatMessages(res.data.messages || []);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to initialize support chat.');
+    }
+  };
+
+  const handleSendChatMessage = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !chatSessionToken) return;
+    const msgText = chatInput;
+    setChatInput('');
+    try {
+      await api.post(`/chat/${chatSessionToken}/message`, { message: msgText });
+      fetchChatHistory(chatSessionToken);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handlePublicTrack = async (ticketId) => {
+    if (!ticketId) return;
+    setLoadingTracking(true);
+    setTrackedTicket(null);
+    try {
+      const res = await api.get(`/tickets/public/${ticketId}`);
+      setTrackedTicket(res.data);
+      setTrackingModalOpen(true);
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || 'Ticket not found or public access restricted.');
+    } finally {
+      setLoadingTracking(false);
+    }
+  };
   
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
@@ -298,12 +393,28 @@ const LandingPage = () => {
             >
               File a Grievance
             </button>
-            <button
-              onClick={() => setLoginModalOpen(true)}
-              className="px-6 py-3.5 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900 rounded-xl text-sm font-bold transition-all cursor-pointer"
-            >
-              Track Existing Report
-            </button>
+
+            {/* Public Ticket Tracker Input Group */}
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-850 rounded-xl p-1.5 w-full max-w-sm">
+              <input
+                type="text"
+                placeholder="Track Ticket ID (e.g., 1)..."
+                value={trackingSearchId}
+                onChange={(e) => setTrackingSearchId(e.target.value)}
+                className="bg-transparent border-none text-xs font-mono text-slate-300 placeholder-slate-600 px-3 py-2 w-full focus:outline-none"
+              />
+              <button
+                onClick={() => handlePublicTrack(trackingSearchId)}
+                disabled={loadingTracking}
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg text-xs font-bold transition-all whitespace-nowrap disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+              >
+                {loadingTracking ? (
+                  <Loader className="w-3.5 h-3.5 animate-spin text-white" />
+                ) : (
+                  <span>Track Status</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -831,6 +942,157 @@ const LandingPage = () => {
           </div>
         </div>
       )}
+
+      {/* 4. Public Ticket Tracker Modal */}
+      {trackingModalOpen && trackedTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative space-y-4">
+            <button
+              onClick={() => {
+                setTrackingModalOpen(false);
+                setTrackedTicket(null);
+              }}
+              className="absolute top-4 right-4 p-2 text-slate-500 hover:text-slate-205 hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+            >
+              <X className="w-4.5 h-4.5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-blue-400 font-bold border-b border-slate-800/60 pb-3">
+              <Clock className="w-5 h-5 animate-pulse" />
+              <h3 className="text-base font-black">Public Grievance Tracker</h3>
+            </div>
+
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Ticket Reference</h4>
+                  <p className="text-xs font-mono font-bold text-slate-200">#T-{trackedTicket.id}</p>
+                </div>
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status</h4>
+                  {getStatusBadge(trackedTicket.status)}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Grievance Summary</h4>
+                <p className="text-xs font-bold text-slate-200">{trackedTicket.title}</p>
+              </div>
+
+              <div>
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">Resolution Progress Timeline</h4>
+                <TicketTimeline ticket={trackedTicket} departmentName={getDepartmentName(trackedTicket.assigned_department_id)} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Floating Public Chat Widget */}
+      <div className="fixed bottom-6 right-6 z-40">
+        {!chatOpen ? (
+          <button
+            onClick={() => setChatOpen(true)}
+            className="flex items-center justify-center p-4 bg-gradient-to-tr from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-full shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer"
+          >
+            <MessageSquare className="w-6 h-6 text-white" />
+          </button>
+        ) : (
+          <div className="w-80 md:w-96 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[480px] animate-fade-in">
+            {/* Header */}
+            <div className="p-4 bg-slate-850 border-b border-slate-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+                <span className="text-xs font-bold text-slate-200">E-Gov Helpdesk Live Support</span>
+              </div>
+              <button
+                onClick={() => setChatOpen(false)}
+                className="p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded-lg transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Chat Body */}
+            <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-950/20">
+              {!chatStarted ? (
+                <form onSubmit={handleStartChat} className="h-full flex flex-col justify-center items-center gap-4 text-center px-4">
+                  <div className="p-3.5 bg-gradient-to-tr from-blue-600/20 to-indigo-600/20 border border-blue-800/30 rounded-2xl text-blue-400">
+                    <MessageSquare className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wide">Live Support Session</h4>
+                    <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                      Start a chat thread directly with dispatch supervisors. All chats are archived securely on the admin dashboard.
+                    </p>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter your name..."
+                    value={citizenName}
+                    onChange={(e) => setCitizenName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 text-xs font-semibold"
+                  />
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-blue-500/10 cursor-pointer"
+                  >
+                    Start Conversation
+                  </button>
+                </form>
+              ) : (
+                <div className="space-y-3 h-full flex flex-col justify-between">
+                  <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                    {chatMessages.map((msg) => {
+                      const isCitizen = msg.sender_role === "citizen";
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col max-w-[80%] ${isCitizen ? 'ml-auto items-end' : 'mr-auto items-start'}`}
+                        >
+                          <span className="text-[8px] text-slate-500 font-bold uppercase mb-1">
+                            {msg.sender_name}
+                          </span>
+                          <div
+                            className={`p-3 rounded-2xl text-xs leading-relaxed ${
+                              isCitizen
+                                ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-tr-none'
+                                : 'bg-slate-850 border border-slate-800 text-slate-250 rounded-tl-none'
+                            }`}
+                          >
+                            {msg.message}
+                          </div>
+                          <span className="text-[8px] text-slate-600 mt-1">
+                            {new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <form onSubmit={handleSendChatMessage} className="flex gap-2 border-t border-slate-850 pt-3">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Type a message..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-650 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 text-xs"
+                    />
+                    <button
+                      type="submit"
+                      className="p-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center"
+                    >
+                      <Send className="w-4 h-4 text-white" />
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
     </div>
   );

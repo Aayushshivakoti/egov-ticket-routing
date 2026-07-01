@@ -194,3 +194,33 @@ class SystemAuditLog(Base):
     current_row_hash = Column(String(64), nullable=False, unique=True)
 
     user = relationship("User", foreign_keys=[user_id])
+
+
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_token = Column(String(50), nullable=False, unique=True, index=True)
+    citizen_name = Column(String(100), nullable=False)
+    status = Column(String(30), default="active", nullable=False)  # active, assigned, escalated, closed
+    assigned_department_id = Column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
+    associated_ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    assigned_department = relationship("Department", foreign_keys=[assigned_department_id])
+    associated_ticket = relationship("Ticket", foreign_keys=[associated_ticket_id])
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    chat_session_id = Column(Integer, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False)
+    sender_role = Column(String(30), nullable=False)  # citizen, admin, department
+    sender_name = Column(String(100), nullable=False)
+    message = Column(Text, nullable=False)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    session = relationship("ChatSession", back_populates="messages")
+

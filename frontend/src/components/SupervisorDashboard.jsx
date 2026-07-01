@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import { Chart, registerables } from 'chart.js';
-import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send, FileSearch, Bell, FileDown, ShieldCheck, Database, Lock, Unlock, ChevronDown, ChevronUp, RefreshCw, Link, Link2Off } from 'lucide-react';
+import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send, FileSearch, Bell, FileDown, ShieldCheck, Database, Lock, Unlock, ChevronDown, ChevronUp, RefreshCw, Link, Link2Off, MessageSquare } from 'lucide-react';
 import ProofRequestsView from './ProofRequestsView';
 import ClarificationModal from './ClarificationModal';
 
@@ -96,6 +96,83 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
   const [verifyResult, setVerifyResult] = useState(null);
   const [tamperingRow, setTamperingRow] = useState(false);
   const [collapsedLogs, setCollapsedLogs] = useState({});
+
+  // Live Chat Center states
+  const [chatSessions, setChatSessions] = useState([]);
+  const [loadingChats, setLoadingChats] = useState(true);
+  const [activeChatSession, setActiveChatSession] = useState(null);
+  const [adminChatInput, setAdminChatInput] = useState('');
+  const [escalateModalOpen, setEscalateModalOpen] = useState(false);
+  const [escalateTitle, setEscalateTitle] = useState('');
+  const [escalateDeptId, setEscalateDeptId] = useState('');
+
+  const fetchChatSessions = async () => {
+    try {
+      const res = await api.get('/chat/admin/sessions');
+      setChatSessions(res.data);
+      if (activeChatSession) {
+        const updated = res.data.find(s => s.id === activeChatSession.id);
+        if (updated) {
+          setActiveChatSession(updated);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch admin chat sessions:", err);
+    } finally {
+      setLoadingChats(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchChatSessions();
+    const interval = setInterval(fetchChatSessions, 4000);
+    return () => clearInterval(interval);
+  }, [activeChatSession]);
+
+  const handleSendAdminMessage = async (e) => {
+    e.preventDefault();
+    if (!adminChatInput.trim() || !activeChatSession) return;
+    const text = adminChatInput;
+    setAdminChatInput('');
+    try {
+      await api.post(`/chat/admin/sessions/${activeChatSession.id}/message`, { message: text });
+      fetchChatSessions();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAssignChatToDept = async (sessionId, deptId) => {
+    if (!deptId) return;
+    try {
+      await api.post(`/chat/admin/sessions/${sessionId}/assign`, { department_id: parseInt(deptId) });
+      fetchChatSessions();
+      alert("Chat successfully assigned to department.");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to assign chat.");
+    }
+  };
+
+  const handleEscalateChatToTicket = async (e) => {
+    e.preventDefault();
+    if (!activeChatSession || !escalateDeptId) return;
+    try {
+      const res = await api.post(`/chat/admin/sessions/${activeChatSession.id}/escalate`, {
+        department_id: parseInt(escalateDeptId),
+        title: escalateTitle || `Escalated Case: ${activeChatSession.citizen_name}`
+      });
+      setEscalateModalOpen(false);
+      setEscalateTitle('');
+      setEscalateDeptId('');
+      fetchChatSessions();
+      onRefresh(); // Refresh tickets list on main dashboard
+      alert(`Formal Ticket #${res.data.id} opened successfully!`);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to escalate chat to ticket.");
+    }
+  };
 
   const fetchPendingChanges = async () => {
     setLoadingChanges(true);
@@ -631,6 +708,244 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
             </table>
           </div>
         </section>
+      )}
+
+      {/* Super Admin Live Chat Center */}
+      <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl transition-all duration-300">
+        <div className="flex items-center gap-2 mb-4 border-b border-slate-800 pb-3">
+          <MessageSquare className="w-5 h-5 text-indigo-400" />
+          <h2 className="font-extrabold text-base text-slate-200">Live Support Chat Center</h2>
+          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-auto">
+            {chatSessions.length} active threads
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[450px]">
+          {/* Chat Sessions Sidebar list */}
+          <div className="lg:col-span-1 border border-slate-850 rounded-xl overflow-y-auto bg-slate-950/20 divide-y divide-slate-855/60 p-2 space-y-2">
+            {loadingChats ? (
+              <div className="flex items-center justify-center h-full text-slate-500 gap-2">
+                <Loader className="w-4 h-4 animate-spin text-indigo-500" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">Loading Chats...</span>
+              </div>
+            ) : chatSessions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-2 text-center p-4">
+                <MessageSquare className="w-6 h-6 text-slate-655" />
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">No active citizen chat requests</p>
+              </div>
+            ) : (
+              chatSessions.map((session) => {
+                const isActive = activeChatSession && activeChatSession.id === session.id;
+                return (
+                  <button
+                    key={session.id}
+                    onClick={() => setActiveChatSession(session)}
+                    className={`w-full text-left p-3.5 rounded-xl transition-all flex flex-col gap-1.5 cursor-pointer border ${
+                      isActive 
+                        ? 'bg-indigo-950/20 border-indigo-500/50 shadow-md shadow-indigo-500/5' 
+                        : 'bg-transparent border-transparent hover:bg-slate-900/40 hover:border-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-200">{session.citizen_name}</span>
+                      <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded-md ${
+                        session.status === 'active' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' :
+                        session.status === 'assigned' ? 'bg-blue-950/40 text-blue-400 border border-blue-900/30' :
+                        session.status === 'escalated' ? 'bg-purple-950/40 text-purple-400 border border-purple-900/30' :
+                        'bg-slate-900 text-slate-400'
+                      }`}>
+                        {session.status}
+                      </span>
+                    </div>
+                    {session.assigned_department_id && (
+                      <p className="text-[9px] font-bold text-blue-400">
+                        Assigned: {getDepartmentName(session.assigned_department_id)}
+                      </p>
+                    )}
+                    {session.associated_ticket_id && (
+                      <p className="text-[9px] font-bold text-purple-400 font-mono">
+                        Ticket: #T-{session.associated_ticket_id}
+                      </p>
+                    )}
+                    <span className="text-[8px] text-slate-550 font-bold">
+                      {new Date(session.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* Message Thread pane */}
+          <div className="lg:col-span-2 border border-slate-850 rounded-xl overflow-hidden bg-slate-950/10 flex flex-col h-full">
+            {!activeChatSession ? (
+              <div className="flex-grow flex flex-col justify-center items-center gap-2.5 text-slate-500 text-center p-6">
+                <MessageSquare className="w-10 h-10 text-slate-700 animate-pulse" />
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide">Select Chat Session</h4>
+                  <p className="text-[10px] text-slate-500 mt-1 max-w-xs">
+                    Select a conversation from the sidebar list to answer citizen requests or assign them to department heads.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col h-full justify-between">
+                {/* Chat Panel Header */}
+                <div className="p-4 bg-slate-900/60 border-b border-slate-850 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-200">{activeChatSession.citizen_name}</h4>
+                    <p className="text-[9px] font-semibold text-slate-500 mt-0.5">Session: {activeChatSession.session_token.slice(0, 8)}...</p>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    {/* Department Assignment selector */}
+                    {activeChatSession.status === 'active' && (
+                      <div className="flex items-center gap-1.5 bg-slate-950 p-1 border border-slate-855 rounded-xl">
+                        <select
+                          id={`dept-assign-${activeChatSession.id}`}
+                          className="bg-transparent border-none text-[10px] font-bold text-slate-400 focus:outline-none px-2"
+                        >
+                          <option value="">Assign Dept...</option>
+                          {departments.map(d => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => {
+                            const selectEl = document.getElementById(`dept-assign-${activeChatSession.id}`);
+                            if (selectEl && selectEl.value) {
+                              handleAssignChatToDept(activeChatSession.id, selectEl.value);
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[9px] font-bold transition-all shadow-md cursor-pointer"
+                        >
+                          Route
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Escalate button */}
+                    {activeChatSession.status !== 'escalated' && (
+                      <button
+                        onClick={() => {
+                          setEscalateTitle(`Escalated case from ${activeChatSession.citizen_name}`);
+                          setEscalateDeptId(activeChatSession.assigned_department_id || '');
+                          setEscalateModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-[10px] font-bold transition-all shadow-md shadow-purple-500/10 cursor-pointer flex items-center gap-1"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>Escalate Ticket</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Messages Body */}
+                <div className="flex-grow p-4 overflow-y-auto space-y-3 bg-slate-950/20">
+                  {activeChatSession.messages && activeChatSession.messages.map((msg) => {
+                    const isAdmin = msg.sender_role === "admin" || msg.sender_role === "department";
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex flex-col max-w-[80%] ${isAdmin ? 'ml-auto items-end' : 'mr-auto items-start'}`}
+                      >
+                        <span className="text-[8px] text-slate-505 font-bold uppercase mb-1">
+                          {msg.sender_name} ({msg.sender_role})
+                        </span>
+                        <div
+                          className={`p-3 rounded-2xl text-xs leading-relaxed ${
+                            isAdmin
+                              ? 'bg-gradient-to-br from-indigo-600 to-purple-650 text-white rounded-tr-none'
+                              : 'bg-slate-850 border border-slate-800 text-slate-200 rounded-tl-none'
+                          }`}
+                        >
+                          {msg.message}
+                        </div>
+                        <span className="text-[8px] text-slate-600 mt-1">
+                          {new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Message input */}
+                <form onSubmit={handleSendAdminMessage} className="p-3 border-t border-slate-850 bg-slate-900/30 flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Type support reply..."
+                    value={adminChatInput}
+                    onChange={(e) => setAdminChatInput(e.target.value)}
+                    className="w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-205 placeholder-slate-650 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 text-xs"
+                  />
+                  <button
+                    type="submit"
+                    className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center"
+                  >
+                    <Send className="w-4 h-4 text-white" />
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Escalate Chat to Formal Ticket Modal Overlay */}
+      {escalateModalOpen && activeChatSession && (
+        <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-850 rounded-2xl p-6 shadow-2xl space-y-4 relative">
+            <button
+              onClick={() => setEscalateModalOpen(false)}
+              className="absolute top-4 right-4 p-2 text-slate-505 hover:text-slate-200 hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2 text-purple-400 font-bold border-b border-slate-800/60 pb-3">
+              <PlusCircle className="w-5 h-5 animate-pulse" />
+              <h3 className="text-base font-black">Escalate Chat to Ticket</h3>
+            </div>
+
+            <form onSubmit={handleEscalateChatToTicket} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Grievance Title</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Broken Water Main Line"
+                  value={escalateTitle}
+                  onChange={(e) => setEscalateTitle(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-205 placeholder-slate-650 focus:outline-none focus:border-purple-500 text-xs font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Assign Target Department</label>
+                <select
+                  required
+                  value={escalateDeptId}
+                  onChange={(e) => setEscalateDeptId(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-205 focus:outline-none focus:border-purple-500 text-xs font-semibold"
+                >
+                  <option value="">Select Target Department...</option>
+                  {departments.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-purple-500/10 cursor-pointer"
+              >
+                Create Formal Case & Dispatch
+              </button>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Compliance Audit Log */}
