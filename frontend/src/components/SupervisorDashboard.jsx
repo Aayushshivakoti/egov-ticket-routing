@@ -946,20 +946,6 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-all text-xs h-20 resize-none font-medium"
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Threshold confidence</label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="0.0"
-                    max="1.0"
-                    required
-                    value={newDeptThreshold}
-                    onChange={(e) => setNewDeptThreshold(parseFloat(e.target.value))}
-                    placeholder="e.g. 0.70"
-                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
-                  />
-                </div>
                 <button
                   id="create-dept-btn"
                   type="submit"
