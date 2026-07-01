@@ -14,11 +14,11 @@ start /b redis-server >nul 2>&1
 
 :: 2. Launch Backend API (Uvicorn)
 echo Starting Backend API ^(FastAPI / Uvicorn^)...
-start /b cmd /c "cd backend && venv\Scripts\python -m alembic upgrade head && venv\Scripts\python app/seed.py && venv\Scripts\uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
+start /b cmd /c "cd backend && venv\Scripts\python -m alembic upgrade head && venv\Scripts\python app/seed.py && venv\Scripts\python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
 
 :: 3. Launch Celery Worker
 echo Starting Celery Solo Worker...
-start /b cmd /c "cd backend && venv\Scripts\celery -A app.celery_app.celery_app worker --loglevel=info -P solo"
+start /b cmd /c "cd backend && venv\Scripts\python -m celery -A app.celery_app.celery_app worker --loglevel=info -P solo"
 
 :: 4. Launch Frontend (Vite)
 echo Starting Frontend Developer Server ^(Vite^)...
