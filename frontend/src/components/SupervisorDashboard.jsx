@@ -925,25 +925,25 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
               )}
               <form onSubmit={handleCreateDept} className="space-y-3 pt-2" id="create-dept-form">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Department Name</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1" htmlFor="dept-name">Department Name</label>
                   <input
+                    id="dept-name"
                     type="text"
+                    placeholder="e.g. Telecommunication Systems"
+                    value={deptName}
+                    onChange={(e) => setDeptName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-all text-xs font-medium"
                     required
-                    value={newDeptName}
-                    onChange={(e) => setNewDeptName(e.target.value)}
-                    placeholder="e.g. Sanitation Department"
-                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Description</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1" htmlFor="dept-desc">Description</label>
                   <textarea
-                    required
-                    rows="3"
-                    value={newDeptDesc}
-                    onChange={(e) => setNewDeptDesc(e.target.value)}
-                    placeholder="Brief description of department scope..."
-                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-855 rounded-lg text-slate-200 placeholder-slate-705 text-xs focus:outline-none focus:border-blue-500"
+                    id="dept-desc"
+                    placeholder="Summarize the core duties of this department..."
+                    value={deptDesc}
+                    onChange={(e) => setDeptDesc(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-all text-xs h-20 resize-none font-medium"
                   />
                 </div>
                 <div>
@@ -961,6 +961,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
                   />
                 </div>
                 <button
+                  id="create-dept-btn"
                   type="submit"
                   disabled={creatingDept}
                   className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
@@ -975,12 +976,12 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
           {/* Advanced Staff Management & Access Control (Dual-Pane) */}
           <div className="xl:col-span-2 p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between">
             <div className="space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-855 pb-3">
+              <div className="flex items-center justify-between border-b border-slate-850 pb-3">
                 <div className="flex items-center gap-2">
                   <UserPlus className="w-5 h-5 text-emerald-400" />
                   <h2 className="font-extrabold text-lg text-slate-200" id="supervisor-personnel-title">Department Personnel & Access</h2>
                 </div>
-                <span className="text-xs text-slate-505 font-bold uppercase tracking-wide">Staff Management</span>
+                <span className="text-xs text-slate-500 font-semibold">Staff Management</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -993,79 +994,104 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
                       return (
                         <div
                           key={dept.id}
-                          onClick={() => handleSelectDept(dept.id)}
-                          className={`p-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          onClick={() => setSelectedDeptId(dept.id)}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${
                             isSelected
-                              ? 'bg-blue-955/20 border-blue-500/50 text-blue-400 shadow-md shadow-blue-500/5'
-                              : 'bg-transparent border-transparent hover:bg-slate-950/50 hover:border-slate-855'
+                              ? 'bg-blue-955/20 border-blue-900/60 text-blue-400 font-bold'
+                              : 'bg-slate-950/20 border-slate-850 text-slate-400 hover:border-slate-800 hover:text-slate-200'
                           }`}
                         >
-                          {dept.name}
+                          <div className="flex-1 min-w-0 pr-2">
+                            <p className="text-xs truncate">{dept.name}</p>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDeptId(dept.id);
+                              setIsEmployeeModalOpen(true);
+                            }}
+                            className="p-1.5 bg-slate-900 hover:bg-emerald-955/40 text-slate-400 hover:text-emerald-400 border border-slate-800/80 rounded-lg opacity-60 group-hover:opacity-100 transition-all"
+                            title="Add New Employee to this department"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Right Panel: Staff Members List */}
+                {/* Right Panel: Data Table of Assigned Employees */}
                 <div className="md:col-span-2 space-y-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Staff Listing for {getDepartmentName(selectedDeptId)}
-                    </p>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Assigned Employees ({employees.length})
+                    </span>
                     {selectedDeptId && (
                       <button
-                        onClick={() => {
-                          setEmployeeError('');
-                          setEmployeeSuccess('');
-                          setNewEmployeeName('');
-                          setNewEmployeeEmail('');
-                          setNewEmployeePassword('');
-                          setNewEmployeeIdOrPassport('');
-                          setNewEmployeeRole('');
-                          setIsEmployeeModalOpen(true);
-                        }}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition-all shadow-md shadow-emerald-500/10 cursor-pointer flex items-center gap-1"
+                        onClick={() => setIsEmployeeModalOpen(true)}
+                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-all shadow-md shadow-emerald-500/10 flex items-center gap-1"
                       >
-                        <UserPlus className="w-3.5 h-3.5" /> Add Staff
+                        <PlusCircle className="w-3.5 h-3.5" /> Add Employee
                       </button>
                     )}
                   </div>
 
                   {loadingEmployees ? (
-                    <div className="flex flex-col items-center justify-center py-10 text-slate-500 gap-2">
-                      <Loader className="w-4 h-4 animate-spin text-blue-500" />
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-2">
+                      <Loader className="w-6 h-6 animate-spin text-blue-500" />
                       <span className="text-[10px] font-bold uppercase tracking-widest">Loading Personnel...</span>
                     </div>
-                  ) : !selectedDeptId ? (
-                    <div className="p-8 text-center text-slate-600 text-xs font-semibold">
-                      Please select a department from the left panel to manage active personnel.
-                    </div>
                   ) : employees.length === 0 ? (
-                    <div className="p-8 text-center text-slate-600 text-xs font-semibold border border-dashed border-slate-805 rounded-xl">
-                      No active personnel registered for this department. Click 'Add Staff' to register an administrator.
+                    <div className="flex flex-col items-center justify-center py-16 text-slate-600 border border-dashed border-slate-800 rounded-xl text-center p-4">
+                      <UserPlus className="w-8 h-8 text-slate-755 mb-2" />
+                      <p className="text-xs font-bold text-slate-400">No employees assigned</p>
+                      <p className="text-[10px] text-slate-600 mt-1 max-w-[200px]">Provision a departmental admin account to manage this department's queue.</p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto border border-slate-850 rounded-xl">
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="border-b border-slate-850 bg-slate-950/40 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                            <th className="py-2.5 px-3">Name</th>
+                            <th className="py-2.5 px-3">Name & Email</th>
+                            <th className="py-2.5 px-3">Employee ID</th>
                             <th className="py-2.5 px-3">Role</th>
-                            <th className="py-2.5 px-3 text-right">Access</th>
+                            <th className="py-2.5 px-3">Status</th>
+                            <th className="py-2.5 px-3 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-855/60 text-xs">
                           {employees.map((emp) => (
-                            <tr key={emp.id} className="hover:bg-slate-950/10">
+                            <tr key={emp.id} className="hover:bg-slate-950/20 employee-row">
                               <td className="py-3 px-3">
                                 <p className="font-semibold text-slate-200">{emp.name}</p>
-                                <p className="text-[9px] text-slate-550 font-mono">{emp.email}</p>
+                                <p className="text-[10px] text-slate-500">{emp.email}</p>
+                              </td>
+                              <td className="py-3 px-3 font-mono text-[10px] text-slate-400">
+                                {emp.employee_id_or_passport || 'N/A'}
                               </td>
                               <td className="py-3 px-3">
-                                <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-full bg-slate-850 text-slate-400">
-                                  {emp.dept_role || 'No Role'}
-                                </span>
+                                <select
+                                  value={emp.dept_role || ''}
+                                  onChange={(e) => handleRoleChange(emp.id, e.target.value)}
+                                  className="px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[10px] font-bold text-slate-300 focus:outline-none focus:border-blue-500 cursor-pointer"
+                                >
+                                  <option value="">Select Role</option>
+                                  <option value="Department Head">Department Head</option>
+                                  <option value="Field Operator">Field Operator</option>
+                                  <option value="Support Rep">Support Rep</option>
+                                </select>
+                              </td>
+                              <td className="py-3 px-3">
+                                {emp.status === 'suspended' ? (
+                                  <span className="px-2 py-0.5 bg-rose-955/40 text-rose-400 border border-rose-900/40 text-[9px] font-extrabold uppercase rounded-full">
+                                    Suspended
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 bg-emerald-950/40 text-emerald-450 border border-emerald-900/40 text-[9px] font-extrabold uppercase rounded-full">
+                                    Active
+                                  </span>
+                                )}
                               </td>
                               <td className="py-3 px-3 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
@@ -1074,7 +1100,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
                                     onClick={() => handleToggleSuspend(emp)}
                                     className={`p-1.5 border rounded-lg transition-all ${
                                       emp.status === 'suspended'
-                                        ? 'bg-emerald-950/20 border-emerald-900/30 text-emerald-455 hover:bg-emerald-900/20'
+                                        ? 'bg-emerald-955/20 border-emerald-900/30 text-emerald-450 hover:bg-emerald-900/20'
                                         : 'bg-rose-955/20 border-rose-900/30 text-rose-455 hover:bg-rose-900/20'
                                     }`}
                                     title={emp.status === 'suspended' ? 'Reactivate Login' : 'Suspend Account'}
@@ -1123,11 +1149,11 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
 
         {/* Add Employee Modal Overlay */}
         {isEmployeeModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-955/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
             <div className="bg-slate-900 border border-slate-805 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl relative">
               <button
                 onClick={() => setIsEmployeeModalOpen(false)}
-                className="absolute top-4 right-4 p-1.5 bg-slate-955/50 hover:bg-slate-955 text-slate-405 hover:text-slate-105 rounded-lg border border-slate-850"
+                className="absolute top-4 right-4 p-1.5 bg-slate-950/50 hover:bg-slate-950 text-slate-405 hover:text-slate-105 rounded-lg border border-slate-850"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1140,12 +1166,12 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
                 </p>
 
                 {employeeError && (
-                  <div className="p-3 bg-rose-955/30 border border-rose-900/50 text-rose-450 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
+                  <div className="p-3 bg-rose-950/30 border border-rose-900/50 text-rose-400 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
                     <ShieldAlert className="w-4 h-4" /> {employeeError}
                   </div>
                 )}
                 {employeeSuccess && (
-                  <div className="p-3 bg-emerald-955/30 border border-emerald-900/50 text-emerald-450 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
+                  <div className="p-3 bg-emerald-955/30 border border-emerald-900/50 text-emerald-400 rounded-xl text-xs flex items-center gap-2 font-medium animate-pulse">
                     <CheckCircle2 className="w-4 h-4" /> {employeeSuccess}
                   </div>
                 )}
@@ -1192,7 +1218,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
                       value={newEmployeeIdOrPassport}
                       onChange={(e) => setNewEmployeeIdOrPassport(e.target.value)}
                       placeholder="e.g. EMP-98273"
-                      className="w-full px-3.5 py-2 bg-slate-950 border border-slate-850 rounded-lg text-slate-200 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
+                      className="w-full px-3.5 py-2 bg-slate-955 border border-slate-850 rounded-lg text-slate-205 placeholder-slate-700 text-xs focus:outline-none focus:border-blue-500"
                     />
                   </div>
                   <div>
@@ -1213,7 +1239,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
                     <button
                       type="button"
                       onClick={() => setIsEmployeeModalOpen(false)}
-                      className="px-4 py-2 bg-slate-955 border border-slate-850 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-bold transition-all"
+                      className="px-4 py-2 bg-slate-955 border border-slate-855 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-bold transition-all"
                     >
                       Cancel
                     </button>
