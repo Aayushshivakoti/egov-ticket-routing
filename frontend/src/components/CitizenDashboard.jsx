@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { PlusCircle, Inbox, Cpu, Loader, AlertTriangle, CheckCircle2, UploadCloud, Mic, Trash2, Video, Music, Image, Paperclip, Eye, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import { PlusCircle, Inbox, Cpu, Loader, AlertTriangle, CheckCircle2, UploadCloud, Mic, Trash2, Video, Music, Image, Paperclip, Eye, MessageSquare, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import LocationPicker from './LocationPicker';
 import ClarificationModal from './ClarificationModal';
 import TicketTimeline from './TicketTimeline';
@@ -568,7 +568,22 @@ const CitizenDashboard = ({ tickets, departments, onRefresh, getPriorityBadge, g
                         {isExpanded && (
                           <tr>
                             <td colSpan="6" className="p-4 bg-slate-950/40 border-t border-b border-slate-800/60">
-                              <TicketTimeline ticket={ticket} departmentName={getDepartmentName(ticket.assigned_department_id)} />
+                              <div className="space-y-4">
+                                {ticket.parent_ticket_id && (
+                                  <div className="p-4 rounded-xl bg-indigo-950/20 border border-indigo-900/40 text-indigo-400 text-left">
+                                    <div className="flex items-start gap-3">
+                                      <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                                      <div>
+                                        <h4 className="font-extrabold text-xs uppercase tracking-wider">Consolidated Issue Detected</h4>
+                                        <p className="text-[11px] text-slate-300 leading-relaxed font-semibold mt-1">
+                                          Your report is linked to Master Case #{ticket.parent_ticket_id}. The department is addressing this as a consolidated area issue. Status updates and resolutions will be propagated automatically.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                <TicketTimeline ticket={ticket} departmentName={getDepartmentName(ticket.assigned_department_id)} />
+                              </div>
                             </td>
                           </tr>
                         )}

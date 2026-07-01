@@ -1,13 +1,116 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Inbox, Eye, Cpu, X, FileText, CheckCircle2, Loader, UserPlus, Bell, AlertTriangle, Trash2 } from 'lucide-react';
+import { Inbox, Eye, Cpu, X, FileText, CheckCircle2, Loader, UserPlus, Bell, AlertTriangle, Trash2, Navigation, MapPin } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ProofRequestsView from './ProofRequestsView';
 import ClarificationModal from './ClarificationModal';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import L from 'leaflet';
+
+// Department color mapping helper
+const DEPT_COLORS = {
+  'water': '#3b82f6', // blue
+  'electricity': '#ef4444', // red
+  'roads': '#f59e0b', // amber
+  'waste': '#10b981', // emerald
+  'default': '#8b5cf6' // purple
+};
+
+const getDeptColor = (deptName) => {
+  if (!deptName) return DEPT_COLORS.default;
+  const lower = deptName.toLowerCase();
+  if (lower.includes('water')) return DEPT_COLORS.water;
+  if (lower.includes('electric') || lower.includes('power')) return DEPT_COLORS.electricity;
+  if (lower.includes('road') || lower.includes('transport')) return DEPT_COLORS.roads;
+  if (lower.includes('waste') || lower.includes('sanitation')) return DEPT_COLORS.waste;
+  return DEPT_COLORS.default;
+};
+
+// Create a custom SVG icon for markers with sequence numbers
+const createNumberedIcon = (num, color) => {
+  const htmlTemplate = `
+    <div style="position: relative; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28" fill="${color}" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: relative; z-index: 10;">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+      </svg>
+      <span style="position: absolute; top: 4px; font-size: 10px; font-weight: 900; color: white; font-family: sans-serif; text-shadow: 0 1px 2px rgba(0,0,0,0.8); z-index: 20;">
+        ${num}
+      </span>
+    </div>
+  `;
+  return L.divIcon({
+    className: 'custom-numbered-pin',
+    html: htmlTemplate,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -28],
+  });
+};
+
+const createOperatorStartIcon = () => {
+  const htmlTemplate = `
+    <div style="position: relative; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
+      <span style="position: absolute; display: inline-flex; height: 28px; width: 28px; border-radius: 9999px; background-color: #3b82f6; opacity: 0.55; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></span>
+      <div style="position: relative; z-index: 10; width: 14px; height: 14px; background-color: #3b82f6; border: 2.5px solid white; border-radius: 9999px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
+    </div>
+  `;
+  return L.divIcon({
+    className: 'custom-operator-start',
+    html: htmlTemplate,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14],
+  });
+};
 
 const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBadge, getDepartmentName, statusFilter }) => {
   const { user } = useAuth();
   const [selectedTicket, setSelectedTicket] = useState(null);
+
+  // Field Operator Route states
+  const [routeTickets, setRouteTickets] = useState([]);
+  const [loadingRoute, setLoadingRoute] = useState(false);
+  const [routeError, setRouteError] = useState(null);
+  const [userLocation, setUserLocation] = useState([27.7172, 85.3240]);
+  const [hasLocation, setHasLocation] = useState(false);
+
+  const isFieldOperator = user?.dept_role === 'Field Operator';
+
+  const fetchRoute = async (lat, lng) => {
+    setLoadingRoute(true);
+    setRouteError(null);
+    try {
+      const res = await api.get(`/tickets/operator/route?lat=${lat}&lng=${lng}`);
+      setRouteTickets(res.data);
+    } catch (err) {
+      console.error("Failed to load optimized route:", err);
+      setRouteError("Failed to calculate optimized route.");
+    } finally {
+      setLoadingRoute(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isFieldOperator) {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            setUserLocation([lat, lng]);
+            setHasLocation(true);
+            fetchRoute(lat, lng);
+          },
+          (err) => {
+            console.warn("Geolocation warning:", err);
+            fetchRoute(27.7172, 85.3240);
+          }
+        );
+      } else {
+        fetchRoute(27.7172, 85.3240);
+      }
+    }
+  }, [user, tickets]);
   const [selectedClarificationTicket, setSelectedClarificationTicket] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [statusVal, setStatusVal] = useState('pending');
@@ -160,6 +263,126 @@ const DeptAdminDashboard = ({ tickets, onRefresh, getPriorityBadge, getStatusBad
                 )}
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* Field Operator Optimized Navigation Route Panel */}
+      {isFieldOperator && routeTickets.length > 0 && (
+        <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Navigation className="w-5 h-5 text-blue-400 animate-pulse" />
+              <h2 className="font-extrabold text-base text-slate-200">Your Optimized Service Route (TSP)</h2>
+            </div>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 border border-slate-850 rounded-xl">
+              <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping" />
+              {routeTickets.filter(t => t.latitude !== null && t.longitude !== null).length} stops
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Map Column */}
+            <div className="lg:col-span-2 h-[380px] rounded-xl overflow-hidden border border-slate-800 relative z-0">
+              <MapContainer center={userLocation} zoom={13} style={{ height: '100%', width: '100%' }}>
+                <TileLayer
+                  attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
+                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                />
+
+                {/* Operator Start Point */}
+                <Marker position={userLocation} icon={createOperatorStartIcon()}>
+                  <Popup>
+                    <div className="p-1 font-sans text-xs">
+                      <p className="font-bold text-slate-800">Your Starting Point</p>
+                      <p className="text-slate-500 mt-0.5">{hasLocation ? "Accurate Geolocation" : "Kathmandu Center (Fallback)"}</p>
+                    </div>
+                  </Popup>
+                </Marker>
+
+                {/* Route Tickets Pins */}
+                {routeTickets.filter(t => t.latitude !== null && t.longitude !== null).map((ticket, index) => {
+                  const deptName = getDepartmentName ? getDepartmentName(ticket.assigned_department_id) : 'Unassigned';
+                  const color = getDeptColor(deptName);
+                  return (
+                    <Marker
+                      key={`route-pin-${ticket.id}`}
+                      position={[ticket.latitude, ticket.longitude]}
+                      icon={createNumberedIcon(index + 1, color)}
+                    >
+                      <Popup className="custom-popup">
+                        <div className="p-1 space-y-2 min-w-[200px] max-w-[240px]">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="text-[10px] font-mono font-bold text-slate-500">Stop #{index + 1} • #T-{ticket.id}</span>
+                            {getPriorityBadge && getPriorityBadge(ticket.priority)}
+                          </div>
+                          <h3 className="font-bold text-sm text-slate-850 leading-tight">{ticket.title}</h3>
+                          <p className="text-xs text-slate-600 line-clamp-2">{ticket.description}</p>
+                          <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{deptName}</span>
+                            {getStatusBadge && getStatusBadge(ticket.status)}
+                          </div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+
+                {/* Draw Dotted Route Connection Lines */}
+                <Polyline
+                  positions={[
+                    userLocation,
+                    ...routeTickets.filter(t => t.latitude !== null && t.longitude !== null).map(t => [t.latitude, t.longitude])
+                  ]}
+                  color="#3b82f6"
+                  weight={3.5}
+                  dashArray="6, 12"
+                />
+              </MapContainer>
+            </div>
+
+            {/* List Column */}
+            <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+              <p className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider text-left">Navigation Sequence</p>
+              <div className="space-y-2.5">
+                {routeTickets.map((ticket, index) => {
+                  const hasCoords = ticket.latitude !== null && ticket.longitude !== null;
+                  const deptName = getDepartmentName ? getDepartmentName(ticket.assigned_department_id) : 'Unassigned';
+                  const color = getDeptColor(deptName);
+                  
+                  return (
+                    <div 
+                      key={`seq-${ticket.id}`} 
+                      className={`p-3 bg-slate-950 border border-slate-855 rounded-xl flex items-center gap-3 hover:border-slate-800 transition-all ${
+                        !hasCoords ? 'opacity-55' : ''
+                      }`}
+                    >
+                      {hasCoords ? (
+                        <div 
+                          className="w-7 h-7 rounded-lg font-mono font-black text-xs flex items-center justify-center border shrink-0 shadow-sm"
+                          style={{ backgroundColor: `${color}15`, borderColor: color, color: color }}
+                        >
+                          {index + 1}
+                        </div>
+                      ) : (
+                        <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-855 text-slate-600 flex items-center justify-center shrink-0">
+                          <MapPin className="w-3.5 h-3.5" />
+                        </div>
+                      )}
+                      
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[9px] font-mono text-slate-500 font-bold">#T-{ticket.id}</span>
+                          {getPriorityBadge && getPriorityBadge(ticket.priority)}
+                        </div>
+                        <p className="font-bold text-xs text-slate-200 truncate mt-0.5">{ticket.title}</p>
+                        <p className="text-[9px] text-slate-500 font-semibold truncate mt-0.5">{ticket.description}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </section>
       )}

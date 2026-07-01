@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, computed_field
 from typing import Optional, List
 from datetime import datetime
 
@@ -118,7 +118,9 @@ class TicketResponse(TicketBase, BaseConfigModel):
     sla_violated: bool = False
     citizen_satisfied: Optional[bool] = None
     reopened: bool = False
+    parent_ticket_id: Optional[int] = None
 
+    child_ticket_ids: List[int] = []
     
     # Extra relationship information if needed
     citizen: Optional[UserResponse] = None

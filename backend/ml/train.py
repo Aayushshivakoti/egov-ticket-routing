@@ -6,7 +6,8 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import FeatureUnion
-from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import classification_report, confusion_matrix
 
 # Nepali stop words list
@@ -14,10 +15,24 @@ NEPALI_STOPWORDS = {
     'र', 'त', 'नेपाल', 'को', 'का', 'की', 'ले', 'मा', 'नि', 'पनि', 'छ', 'छन्', 'थिए', 'भयो', 'गरे', 'गर्नु', 'हुने', 'हो', 'हुन्', 'बाट', 'लाई', 'देखि', 'म', 'हामी', 'तपाई', 'ऊ', 'यो', 'त्यो', 'यस', 'त्यस', 'भने', 'रहेको', 'गरेको', 'भनेर', 'रुपमा', 'पर्ने', 'गर्न', 'पर्छ', 'यस्तो', 'त्यस्तो', 'पनि', 'हुन'
 }
 
+def stem_nepali(word: str) -> str:
+    """
+    Remove common suffixes from Nepali Devanagari words to normalize variations.
+    """
+    suffixes = [
+        'हरू', 'लाई', 'बाट', 'सँग', 'सँगै', 'भन्दा', 'सम्म',
+        'को', 'का', 'की', 'ले', 'मा', 'नि', 'नै',
+        'देखि', 'द्वारा', 'तर्फ', 'माथि', 'मुनि', 'हरूलाई', 'हरूबाट'
+    ]
+    suffixes.sort(key=len, reverse=True)
+    for suffix in suffixes:
+        if word.endswith(suffix) and len(word) > len(suffix) + 1:
+            return word[:-len(suffix)]
+    return word
+
 # Pure Python fallback preprocessing function
 def fallback_preprocess_text(text: str) -> str:
     text = text.lower()
-    # Strip standard punctuation and Devanagari punctuation (dandas)
     punc_to_strip = string.punctuation + '।॥'
     text = text.translate(str.maketrans('', '', punc_to_strip))
     tokens = text.split()
@@ -48,7 +63,14 @@ def fallback_preprocess_text(text: str) -> str:
             if word.endswith('ed'): return word[:-2]
         return word
         
-    cleaned = [basic_lemma(word) for word in tokens if (word not in STOP_WORDS_EN and word not in NEPALI_STOPWORDS)]
+    cleaned = []
+    for word in tokens:
+        if word in STOP_WORDS_EN or word in NEPALI_STOPWORDS:
+            continue
+        if re.match(r'^[a-z]+$', word):
+            cleaned.append(basic_lemma(word))
+        else:
+            cleaned.append(stem_nepali(word))
     return " ".join(cleaned)
 
 # Attempt NLTK preprocessing setup
@@ -71,7 +93,6 @@ try:
     def preprocess_text(text: str) -> str:
         try:
             text = text.lower()
-            # Strip standard punctuation and Devanagari punctuation (dandas)
             punc_to_strip = string.punctuation + '।॥'
             text = text.translate(str.maketrans('', '', punc_to_strip))
             tokens = word_tokenize(text)
@@ -80,11 +101,11 @@ try:
             for word in tokens:
                 if word in STOP_WORDS_EN or word in NEPALI_STOPWORDS:
                     continue
-                # Lemmatize English terms only
+                # Lemmatize English terms, stem Devanagari
                 if re.match(r'^[a-z]+$', word):
                     cleaned.append(lemmatizer.lemmatize(word))
                 else:
-                    cleaned.append(word)
+                    cleaned.append(stem_nepali(word))
             return " ".join(cleaned)
         except Exception:
             return fallback_preprocess_text(text)
@@ -124,8 +145,9 @@ def main():
     X_train_tfidf = vectorizer.fit_transform(X_train)
     X_test_tfidf = vectorizer.transform(X_test)
     
-    print("Training Logistic Regression classifier...")
-    model = LogisticRegression(C=1.0, random_state=42, max_iter=1000)
+    print("Training Calibrated LinearSVC classifier...")
+    base_svc = LinearSVC(C=1.0, random_state=42, dual=False, max_iter=2000)
+    model = CalibratedClassifierCV(estimator=base_svc, cv=5)
     model.fit(X_train_tfidf, y_train)
     
     predictions = model.predict(X_test_tfidf)

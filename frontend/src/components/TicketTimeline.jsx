@@ -52,57 +52,59 @@ const TicketTimeline = ({ ticket, departmentName }) => {
   ];
 
   return (
-    <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-6 mt-4 backdrop-blur-sm">
+    <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-6 mt-4 backdrop-blur-md select-none">
       <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
           Resolution Timeline Tracker
         </h4>
-        <span className="text-[10px] font-mono text-slate-500 bg-slate-950/60 border border-slate-800 px-2 py-0.5 rounded uppercase">
+        <span className="text-[10px] font-mono text-slate-400 bg-slate-950/60 border border-slate-800 px-2 py-0.5 rounded uppercase font-bold">
           Status: {status.replace('_', ' ')}
         </span>
       </div>
 
-      <div className="relative pl-8 space-y-6">
-        {/* Progress connecting line */}
-        <div className="absolute left-[15px] top-2 bottom-2 w-0.5 bg-slate-800"></div>
+      <div className="relative pl-8 space-y-5">
+        {/* Glowing Progress connecting line */}
+        <div className="absolute left-[15px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-blue-500 via-indigo-500 to-slate-800 shadow-[0_0_8px_rgba(59,130,246,0.3)]"></div>
 
         {steps.map((step, idx) => {
           const StepIcon = step.icon;
           return (
-            <div key={step.key} className="relative flex flex-col sm:flex-row items-start gap-4">
-              {/* Node Indicator bubble */}
-              <div className={`absolute -left-[27px] top-0 w-8 h-8 rounded-xl flex items-center justify-center border transition-all duration-500 ${
+            <div key={step.key} className="relative flex flex-col sm:flex-row items-start gap-4 transition-all duration-300">
+              {/* Node Indicator bubble with drop shadows */}
+              <div className={`absolute -left-[27px] top-0 w-8 h-8 rounded-xl flex items-center justify-center border transition-all duration-500 z-10 ${
                 step.isCompleted 
-                  ? 'bg-blue-600/25 border-blue-500 text-blue-400' 
+                  ? 'bg-blue-900/40 border-blue-500 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.25)]' 
                   : (step.isActive 
-                    ? 'bg-slate-900 border-indigo-500 text-indigo-400 shadow-md shadow-indigo-900/35 animate-pulse' 
-                    : 'bg-slate-950 border-slate-800 text-slate-650')
+                    ? 'bg-slate-950 border-indigo-500 text-indigo-400 shadow-[0_0_12px_rgba(99,102,241,0.4)] animate-pulse' 
+                    : 'bg-slate-950 border-slate-800/80 text-slate-600')
               }`}>
                 <StepIcon className="w-4 h-4" />
               </div>
 
-              {/* Node Details text content */}
-              <div className="flex-1">
+              {/* Node Details text content wrapped in a glassmorphic card */}
+              <div className={`flex-1 p-3 bg-slate-950/30 border border-slate-850 rounded-xl hover:border-slate-800 hover:scale-[1.01] active:scale-[0.99] transition-all duration-300 text-left ${
+                step.isCompleted ? 'border-slate-800' : (step.isActive ? 'border-indigo-950' : 'border-slate-900/60')
+              }`}>
                 <h5 className={`text-xs font-extrabold ${
                   step.isCompleted 
                     ? 'text-slate-200' 
-                    : (step.isActive ? 'text-indigo-400' : 'text-slate-550')
+                    : (step.isActive ? 'text-indigo-400' : 'text-slate-500')
                 }`}>
                   {step.label}
                 </h5>
-                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed max-w-lg">
+                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed max-w-lg font-medium">
                   {step.description}
                 </p>
               </div>
 
               {/* Date details */}
               {idx === 0 && (
-                <div className="text-[9px] text-slate-500 font-mono tracking-wider font-semibold whitespace-nowrap self-start mt-0.5 uppercase">
+                <div className="text-[9px] text-slate-500 font-mono tracking-wider font-semibold whitespace-nowrap self-start mt-1.5 uppercase">
                   {new Date(ticket.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </div>
               )}
               {idx === 3 && status === 'resolved' && (
-                <div className="text-[9px] text-slate-500 font-mono tracking-wider font-semibold whitespace-nowrap self-start mt-0.5 uppercase">
+                <div className="text-[9px] text-slate-500 font-mono tracking-wider font-semibold whitespace-nowrap self-start mt-1.5 uppercase">
                   {new Date(ticket.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </div>
               )}
@@ -112,7 +114,7 @@ const TicketTimeline = ({ ticket, departmentName }) => {
       </div>
 
       {status === 'sla_violated' && (
-        <div className="p-3 bg-rose-950/20 border border-rose-900/30 rounded-xl text-xs flex items-center gap-2.5 text-rose-400">
+        <div className="p-3 bg-rose-950/20 border border-rose-900/30 rounded-xl text-xs flex items-center gap-2.5 text-rose-400 text-left font-semibold">
           <AlertTriangle className="w-4 h-4 animate-bounce" />
           <span>SLA violation flagged. Assigned department failed to respond in the required 24-hour window.</span>
         </div>

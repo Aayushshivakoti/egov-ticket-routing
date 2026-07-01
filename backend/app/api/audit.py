@@ -12,6 +12,33 @@ from app.utils.audit import GENESIS_HASH
 
 router = APIRouter()
 
+@router.get("/audit")
+def get_audit_logs(
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Fetch all system audit logs. Requires super admin privileges.
+    """
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    logs = db.query(SystemAuditLog).order_by(SystemAuditLog.id.desc()).all()
+    
+    return [
+        {
+            "id": log.id,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+            "user_id": log.user_id,
+            "user_name": log.user.name if log.user else "SYSTEM",
+            "action_performed": log.action_performed,
+            "payload": log.payload,
+            "previous_row_hash": log.previous_row_hash,
+            "current_row_hash": log.current_row_hash
+        }
+        for log in logs
+    ]
+
 @router.get("/verify")
 def verify_hash_chain(
     db: Session = Depends(get_db),

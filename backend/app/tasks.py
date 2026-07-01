@@ -47,6 +47,14 @@ def classify_ticket_task(ticket_id: int):
         db.refresh(ticket)
         print(f"Ticket ID {ticket_id} database update committed successfully.")
 
+        # Trigger spatial clustering for this department
+        if ticket.assigned_department_id:
+            try:
+                cluster_department_tickets_task.delay(ticket.assigned_department_id)
+                print(f"Triggered spatial clustering task for department ID {ticket.assigned_department_id}")
+            except Exception as task_err:
+                print(f"Failed to trigger spatial clustering task: {task_err}")
+
         # Publish notification & save latency via Redis
         try:
             redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -80,6 +88,24 @@ def classify_ticket_task(ticket_id: int):
     except Exception as e:
         db.rollback()
         print(f"Error processing ticket ID {ticket_id}: {e}")
+        raise e
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.tasks.cluster_department_tickets_task")
+def cluster_department_tickets_task(department_id: int):
+    """
+    Background worker: runs spatial clustering with DBSCAN on unresolved department tickets.
+    """
+    print(f"Starting Celery spatial clustering task for department ID: {department_id}")
+    db = SessionLocal()
+    try:
+        from app.utils.clustering import run_spatial_clustering
+        run_spatial_clustering(db, department_id)
+        return f"Successfully ran spatial clustering for department {department_id}."
+    except Exception as e:
+        print(f"Error in spatial clustering task for department {department_id}: {e}")
         raise e
     finally:
         db.close()

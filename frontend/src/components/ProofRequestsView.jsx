@@ -2,6 +2,87 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ShieldCheck, Loader, CheckCircle2, AlertCircle, Clock, ExternalLink, Upload, File as FileIcon } from 'lucide-react';
 import api from '../services/api';
 
+const SlaRing = ({ createdAt, status }) => {
+  const [percent, setPercent] = useState(100);
+  const [hoursLeft, setHoursLeft] = useState(24);
+
+  useEffect(() => {
+    if (status !== 'pending') return;
+    const updateTime = () => {
+      const created = new Date(createdAt).getTime();
+      const now = new Date().getTime();
+      const limit = 24 * 60 * 60 * 1000; // 24-hour SLA
+      const elapsed = now - created;
+      const remaining = limit - elapsed;
+      
+      const pct = Math.max(0, Math.min(100, (remaining / limit) * 100));
+      setPercent(pct);
+      setHoursLeft(Math.max(0, remaining / (1000 * 60 * 60)));
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 30000); // tick every 30s
+    return () => clearInterval(interval);
+  }, [createdAt, status]);
+
+  if (status !== 'pending') return null;
+
+  const radius = 16;
+  const stroke = 3;
+  const normalizedRadius = radius - stroke * 2;
+  const circumference = normalizedRadius * 2 * Math.PI;
+  const strokeDashoffset = circumference - (percent / 100) * circumference;
+
+  let color = '#10b981'; // Green (Safe)
+  let textClass = 'text-emerald-400 font-bold';
+  let isPulsing = false;
+  
+  if (hoursLeft <= 3.0) { // Under 3 hours
+    color = '#ef4444'; // Red (Urgent)
+    textClass = 'text-rose-500 font-black animate-pulse';
+    isPulsing = true;
+  } else if (hoursLeft <= 12.0) { // Under 12 hours
+    color = '#f59e0b'; // Amber (Warning)
+    textClass = 'text-amber-400 font-bold';
+  }
+
+  return (
+    <div className="flex items-center gap-2 mt-2 select-none border border-slate-800/40 bg-slate-950/20 p-2 rounded-xl w-max">
+      <div className={`relative flex items-center justify-center ${isPulsing ? 'animate-pulse' : ''}`}>
+        <svg height={radius * 2} width={radius * 2} className="transform -rotate-90">
+          <circle
+            stroke="#1e293b"
+            fill="transparent"
+            strokeWidth={stroke}
+            r={normalizedRadius}
+            cx={radius}
+            cy={radius}
+          />
+          <circle
+            stroke={color}
+            fill="transparent"
+            strokeWidth={stroke}
+            strokeDasharray={circumference + ' ' + circumference}
+            style={{ strokeDashoffset }}
+            strokeLinecap="round"
+            r={normalizedRadius}
+            cx={radius}
+            cy={radius}
+            className="transition-all duration-500 ease-in-out"
+          />
+        </svg>
+        <span className="absolute text-[8px] font-black text-slate-400">{percent.toFixed(0)}%</span>
+      </div>
+      <div className="text-left leading-none">
+        <p className={`text-[9px] uppercase tracking-wider ${textClass}`}>
+          {hoursLeft <= 0 ? "SLA Breached" : `${hoursLeft.toFixed(1)}h Left`}
+        </p>
+        <span className="text-[7px] text-slate-500 font-bold uppercase tracking-widest mt-0.5 inline-block">SLA Clock</span>
+      </div>
+    </div>
+  );
+};
+
 const ProofRequestsView = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -174,7 +255,12 @@ const ProofRequestsView = () => {
                     </td>
                     <td className="py-4 px-6 font-medium text-indigo-300">{req.citizen_name}</td>
                     <td className="py-4 px-6 text-slate-400 font-medium">{formatDate(req.created_at)}</td>
-                    <td className="py-4 px-6">{getStatusBadge(req.status)}</td>
+                    <td className="py-4 px-6 font-medium">
+                      <div className="flex flex-col gap-1">
+                        {getStatusBadge(req.status)}
+                        {req.status === 'pending' && <SlaRing createdAt={req.created_at} status={req.status} />}
+                      </div>
+                    </td>
                     <td className="py-4 px-6 text-right">
                       <div className="flex justify-end gap-2">
                         {req.status === 'pending' && (

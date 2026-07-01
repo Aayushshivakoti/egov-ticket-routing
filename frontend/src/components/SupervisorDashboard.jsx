@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import { Chart, registerables } from 'chart.js';
-import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send, FileSearch, Bell, FileDown } from 'lucide-react';
+import { Inbox, Cpu, BarChart3, PieChart, ShieldAlert, CheckCircle2, AlertTriangle, Loader, Zap, Award, Building2, UserPlus, PlusCircle, UserMinus, Trash2, FolderSync, X, Clock, Send, FileSearch, Bell, FileDown, ShieldCheck, Database, Lock, Unlock, ChevronDown, ChevronUp, RefreshCw, Link, Link2Off } from 'lucide-react';
 import ProofRequestsView from './ProofRequestsView';
 import ClarificationModal from './ClarificationModal';
 
@@ -88,6 +88,14 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
   // Compliance Audit Log state
   const [auditLog, setAuditLog] = useState([]);
   const [loadingAudit, setLoadingAudit] = useState(true);
+
+  // Cryptographic System Audit Ledger states
+  const [systemAuditLogs, setSystemAuditLogs] = useState([]);
+  const [loadingSystemAudit, setLoadingSystemAudit] = useState(true);
+  const [verifyingChain, setVerifyingChain] = useState(false);
+  const [verifyResult, setVerifyResult] = useState(null);
+  const [tamperingRow, setTamperingRow] = useState(false);
+  const [collapsedLogs, setCollapsedLogs] = useState({});
 
   const fetchPendingChanges = async () => {
     setLoadingChanges(true);
@@ -291,11 +299,63 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
     }
   };
 
+  const fetchSystemAuditLogs = async () => {
+    setLoadingSystemAudit(true);
+    try {
+      const res = await api.get('/audit');
+      setSystemAuditLogs(res.data);
+    } catch (err) {
+      console.error('Failed to load system audit logs:', err);
+    } finally {
+      setLoadingSystemAudit(false);
+    }
+  };
+
+  const handleVerifyChain = async () => {
+    setVerifyingChain(true);
+    setVerifyResult(null);
+    try {
+      const res = await api.get('/verify');
+      setVerifyResult(res.data);
+    } catch (err) {
+      console.error("Failed to verify audit chain:", err);
+      alert(err.response?.data?.detail || "Verification failed");
+    } finally {
+      setVerifyingChain(false);
+    }
+  };
+
+  const handleSimulateTampering = async () => {
+    if (!window.confirm("WARNING: This will intentionally corrupt a random row in the database SystemAuditLog table to simulate a malicious internal modification. Proceed?")) return;
+    setTamperingRow(true);
+    try {
+      const res = await api.post('/simulate-tamper');
+      alert(res.data.message || "Simulated database tampering successful!");
+      fetchSystemAuditLogs();
+      setTimeout(() => {
+        handleVerifyChain();
+      }, 500);
+    } catch (err) {
+      console.error("Failed to simulate tampering:", err);
+      alert(err.response?.data?.detail || "Simulation failed");
+    } finally {
+      setTamperingRow(false);
+    }
+  };
+
+  const toggleLogCollapse = (id) => {
+    setCollapsedLogs(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
   useEffect(() => {
     fetchTelemetry();
     fetchSlaViolations();
     fetchPendingChanges();
     fetchAuditLog();
+    fetchSystemAuditLogs();
     fetchCsatMetrics();
   }, [tickets]);
 
@@ -574,7 +634,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
       )}
 
       {/* Compliance Audit Log */}
-      <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl">
+      <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl transition-all duration-300 hover:scale-[1.01] hover:border-slate-700/80 active:scale-[0.99] hover:shadow-xl hover:shadow-slate-950/20">
         <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <FileSearch className="w-5 h-5 text-cyan-400" />
@@ -626,6 +686,259 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </section>
+
+      {/* Cryptographic Ledger & Database Integrity Audit */}
+      <section className="p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl transition-all duration-300 hover:scale-[1.01] hover:border-slate-700/80 active:scale-[0.99]">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-slate-850 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-gradient-to-tr from-cyan-600 to-indigo-600 rounded-xl shadow-lg shadow-cyan-500/10">
+              <Database className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="font-extrabold text-base text-slate-100 flex items-center gap-2">
+                Cryptographic Audit Ledger
+                <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-cyan-950/60 text-cyan-400 border border-cyan-900/30">
+                  SHA-256 Chain
+                </span>
+              </h2>
+              <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                Mathematical blockchain-like proof of database integrity.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={fetchSystemAuditLogs}
+              disabled={loadingSystemAudit || verifyingChain || tamperingRow}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-350 hover:text-white border border-slate-750 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Refresh ledger logs"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingSystemAudit ? 'animate-spin' : ''}`} />
+              <span>Refresh Logs</span>
+            </button>
+            <button
+              onClick={handleSimulateTampering}
+              disabled={loadingSystemAudit || verifyingChain || tamperingRow}
+              className="px-3.5 py-2 bg-rose-950/30 hover:bg-rose-900/30 text-rose-400 hover:text-rose-300 border border-rose-900/30 hover:border-rose-800/40 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Simulate database compromise by a rogue admin/DBA"
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-450" />
+              <span>Simulate DBA Tampering</span>
+            </button>
+            <button
+              onClick={handleVerifyChain}
+              disabled={loadingSystemAudit || verifyingChain || tamperingRow}
+              className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 flex items-center"
+              title="Recalculate hash chain validation sequentially"
+            >
+              {verifyingChain ? (
+                <>
+                  <Loader className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                  <span>Scanning Chain...</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                  <span>Verify Integrity</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Verification Alert Banner */}
+        {verifyResult && (
+          <div className={`p-4 rounded-2xl mb-6 border transition-all animate-fade-in ${
+            verifyResult.status === "OK" 
+              ? 'bg-emerald-955/20 border-emerald-900/40 text-emerald-400' 
+              : 'bg-rose-955/20 border-rose-900/40 text-rose-400 border-dashed animate-pulse-slow'
+          }`}>
+            <div className="flex items-start gap-3">
+              {verifyResult.status === "OK" ? (
+                <ShieldCheck className="w-5 h-5 shrink-0 mt-0.5" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-rose-400" />
+              )}
+              <div>
+                <h4 className="font-extrabold text-sm uppercase tracking-wide">
+                  System Integrity: {verifyResult.status === "OK" ? "VERIFIED SECURE" : "INTEGRITY BREACH DETECTED!"}
+                </h4>
+                <p className="text-xs mt-1 text-slate-300 leading-relaxed font-semibold">
+                  {verifyResult.message}
+                </p>
+                {verifyResult.status === "TAMPERED" && (
+                  <p className="text-[10px] text-rose-500 font-extrabold uppercase mt-1 tracking-widest font-mono">
+                    Compromised Row ID: #{verifyResult.tampered_row_id} | Security Alert level: CRITICAL
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Logs Chain List */}
+        {loadingSystemAudit ? (
+          <div className="flex items-center justify-center py-16 text-slate-500 gap-2.5">
+            <Loader className="w-5 h-5 animate-spin text-cyan-500" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Loading Cryptographic Ledger...</span>
+          </div>
+        ) : systemAuditLogs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-slate-600 gap-3 border border-dashed border-slate-800 rounded-2xl bg-slate-950/10">
+            <Database className="w-8 h-8 text-slate-700" />
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">No audit logs created yet</p>
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            {systemAuditLogs.map((log, index) => {
+              const isTamperedRow = verifyResult && verifyResult.status === "TAMPERED" && log.id === verifyResult.tampered_row_id;
+              const isBrokenChainLink = verifyResult && verifyResult.status === "TAMPERED" && log.id > verifyResult.tampered_row_id;
+              const isVerifiedSecured = verifyResult && (verifyResult.status === "OK" || (verifyResult.status === "TAMPERED" && log.id < verifyResult.tampered_row_id));
+              
+              let prettyPayload = "";
+              try {
+                prettyPayload = JSON.stringify(JSON.parse(log.payload), null, 2);
+              } catch {
+                prettyPayload = log.payload;
+              }
+
+              const isCollapsed = collapsedLogs[log.id] !== false; // collapsed by default
+
+              return (
+                <div key={log.id}>
+                  {/* Ledger Block */}
+                  <div className={`p-4 bg-slate-950/30 border rounded-2xl transition-all ${
+                    isTamperedRow
+                      ? 'border-rose-500 shadow-lg shadow-rose-500/10 bg-rose-950/10 border-solid'
+                      : isBrokenChainLink
+                      ? 'border-amber-700/60 bg-slate-950/40 opacity-70 border-dashed'
+                      : 'border-slate-850 hover:border-slate-800'
+                  }`}>
+                    {/* Block Info Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center border font-mono text-xs font-black shadow-sm ${
+                          isTamperedRow
+                            ? 'bg-rose-950 border-rose-800 text-rose-450'
+                            : isBrokenChainLink
+                            ? 'bg-amber-950/60 border-amber-900/60 text-amber-500'
+                            : isVerifiedSecured
+                            ? 'bg-emerald-950/60 border-emerald-900/60 text-emerald-450'
+                            : 'bg-slate-900 border-slate-800 text-slate-400'
+                        }`}>
+                          #{log.id}
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-xs text-slate-200">
+                            {log.action_performed}
+                          </h4>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500 font-semibold mt-0.5">
+                            <span className="text-slate-400 font-bold">{log.user_name}</span>
+                            <span>•</span>
+                            <span>
+                              {new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Block Badges & Actions */}
+                      <div className="flex items-center gap-2">
+                        {isTamperedRow && (
+                          <span className="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-md bg-rose-950/60 text-rose-400 border border-rose-900/40 flex items-center gap-1">
+                            <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
+                            Tampered
+                          </span>
+                        )}
+                        {isBrokenChainLink && (
+                          <span className="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-md bg-amber-950/60 text-amber-400 border border-amber-900/40 flex items-center gap-1">
+                            <Unlock className="w-2.5 h-2.5 text-amber-400" />
+                            Broken Ancestor
+                          </span>
+                        )}
+                        {isVerifiedSecured && (
+                          <span className="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-md bg-emerald-950/60 text-emerald-400 border border-emerald-900/40 flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5 text-emerald-400" />
+                            Verified Secure
+                          </span>
+                        )}
+                        {!verifyResult && (
+                          <span className="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-md bg-slate-900/80 text-slate-400 border border-slate-800 flex items-center gap-1">
+                            <Clock className="w-2.5 h-2.5 text-slate-400" />
+                            Unverified
+                          </span>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => toggleLogCollapse(log.id)}
+                          className="p-1 bg-slate-900 hover:bg-slate-800 text-slate-450 hover:text-slate-200 border border-slate-800 rounded-lg transition-all cursor-pointer"
+                        >
+                          {isCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expandable Payload & Hash Block */}
+                    {!isCollapsed && (
+                      <div className="mt-4 pt-4 border-t border-slate-900/80 space-y-3.5 text-[11px]">
+                        <div>
+                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 font-sans">Block Payload Data</p>
+                          <pre className="p-3 bg-slate-950 border border-slate-850 rounded-xl font-mono text-[10px] text-cyan-400 leading-relaxed overflow-x-auto select-text max-h-48 text-left whitespace-pre-wrap break-all">
+                            {prettyPayload}
+                          </pre>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 font-mono text-[9px] text-left">
+                          <div>
+                            <p className="text-[10px] text-slate-505 font-bold uppercase tracking-wider mb-1 font-sans">Previous Link Hash</p>
+                            <div className="p-2.5 bg-slate-950 border border-slate-850 rounded-lg text-slate-450 truncate" title={log.previous_row_hash}>
+                              {log.previous_row_hash}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-505 font-bold uppercase tracking-wider mb-1 font-sans">Current Block Hash</p>
+                            <div className={`p-2.5 bg-slate-950 border rounded-lg truncate ${
+                              isTamperedRow ? 'border-rose-900 text-rose-400' : 'border-slate-850 text-slate-450'
+                            }`} title={log.current_row_hash}>
+                              {log.current_row_hash}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Visual Chain Connector */}
+                  {index < systemAuditLogs.length - 1 && (
+                    <div className="h-8 flex items-center justify-center relative my-0.5">
+                      <div className={`w-0.5 h-full ${
+                        isTamperedRow || (verifyResult && verifyResult.status === "TAMPERED" && log.id >= verifyResult.tampered_row_id && systemAuditLogs[index+1].id >= verifyResult.tampered_row_id)
+                          ? 'bg-gradient-to-b from-rose-500 to-amber-700 border-dashed border-l border-rose-500/40'
+                          : isVerifiedSecured && (verifyResult && (verifyResult.status === "OK" || systemAuditLogs[index+1].id < verifyResult.tampered_row_id))
+                          ? 'bg-emerald-500'
+                          : 'bg-slate-800'
+                      }`} />
+                      <div className={`absolute p-1 border rounded-md shadow-sm flex items-center justify-center bg-slate-900 ${
+                        isTamperedRow || (verifyResult && verifyResult.status === "TAMPERED" && log.id >= verifyResult.tampered_row_id && systemAuditLogs[index+1].id >= verifyResult.tampered_row_id)
+                          ? 'border-rose-900/60 text-rose-450'
+                          : isVerifiedSecured && (verifyResult && (verifyResult.status === "OK" || systemAuditLogs[index+1].id < verifyResult.tampered_row_id))
+                          ? 'border-emerald-900/60 text-emerald-450'
+                          : 'border-slate-850 text-slate-500'
+                      }`}>
+                        {isTamperedRow || (verifyResult && verifyResult.status === "TAMPERED" && log.id >= verifyResult.tampered_row_id && systemAuditLogs[index+1].id >= verifyResult.tampered_row_id) ? (
+                          <Link2Off className="w-3.5 h-3.5 animate-pulse" />
+                        ) : (
+                          <Link className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
@@ -695,7 +1008,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
           {/* Interactive Chart Canvases */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Accuracy Graph */}
-            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col">
+            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col transition-all duration-300 hover:scale-[1.01] hover:border-slate-700/80 active:scale-[0.99] hover:shadow-xl">
               <span className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 block">Daily Classification Accuracy</span>
               <div className="h-56 relative flex-1">
                 <canvas ref={accuracyChartRef}></canvas>
@@ -703,7 +1016,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
             </div>
 
             {/* Ingestion Latency Graph */}
-            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col">
+            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col transition-all duration-300 hover:scale-[1.01] hover:border-slate-700/80 active:scale-[0.99] hover:shadow-xl">
               <span className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 block">System Pipeline Latency (ms)</span>
               <div className="h-56 relative flex-1">
                 <canvas ref={latencyChartRef}></canvas>
@@ -711,7 +1024,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
             </div>
 
             {/* Confusion Matrix Stacked Distribution */}
-            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col">
+            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col transition-all duration-300 hover:scale-[1.01] hover:border-slate-700/80 active:scale-[0.99] hover:shadow-xl">
               <span className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 block">AI Class Confusion Distribution</span>
               <div className="h-64 relative flex-1">
                 <canvas ref={confusionChartRef}></canvas>
@@ -719,7 +1032,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
             </div>
 
             {/* Citizen Satisfaction (CSAT) Breakdown */}
-            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col">
+            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col transition-all duration-300 hover:scale-[1.01] hover:border-slate-700/80 active:scale-[0.99] hover:shadow-xl">
               <span className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 block">Citizen Satisfaction Score (CSAT) per Department</span>
               <div className="h-64 relative flex-1">
                 {loadingCsat ? (
@@ -734,7 +1047,7 @@ const SupervisorDashboard = ({ tickets, departments, onRefresh, getPriorityBadge
             </div>
 
             {/* Confusion Matrix Heatmap Grid */}
-            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col">
+            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col transition-all duration-300 hover:scale-[1.01] hover:border-slate-700/80 active:scale-[0.99] hover:shadow-xl">
               <span className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 block">Interactive Confusion Matrix Heatmap</span>
               <span className="text-[10px] text-slate-500 font-semibold mb-4">True class (Rows) vs. AI Predicted class (Columns)</span>
               <div className="overflow-x-auto flex-1">

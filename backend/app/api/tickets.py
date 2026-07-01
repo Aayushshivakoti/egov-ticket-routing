@@ -376,6 +376,12 @@ def update_ticket(
         if ticket_update.ai_confidence is not None:
             ticket.ai_confidence = ticket_update.ai_confidence
             
+    # Cascade status updates to child tickets if the status was modified on a Master Ticket
+    if ticket_update.status is not None:
+        child_tickets = db.query(Ticket).filter(Ticket.parent_ticket_id == ticket.id).all()
+        for child in child_tickets:
+            child.status = ticket_update.status
+
     db.commit()
     db.refresh(ticket)
 
@@ -470,6 +476,38 @@ def update_ticket_status_explicit(
     if status == "resolved":
         ticket.report = report
         ticket.reopened = False
+        
+    # Cascade status updates to child tickets if this is a Master Ticket
+    child_tickets = db.query(Ticket).filter(Ticket.parent_ticket_id == ticket.id).all()
+    if child_tickets:
+        for child in child_tickets:
+            child.status = status
+            child.remarks = remarks
+            if status == "resolved":
+                child.report = report
+                child.reopened = False
+                
+        if status == "resolved" and files:
+            # Re-fetch proofs that were just saved on the master ticket
+            master_proofs = db.query(TicketAttachment).filter(
+                TicketAttachment.ticket_id == ticket.id,
+                TicketAttachment.is_proof == True
+            ).all()
+            for child in child_tickets:
+                for proof in master_proofs:
+                    exists = db.query(TicketAttachment).filter(
+                        TicketAttachment.ticket_id == child.id,
+                        TicketAttachment.file_path == proof.file_path,
+                        TicketAttachment.is_proof == True
+                    ).first()
+                    if not exists:
+                        new_proof = TicketAttachment(
+                            ticket_id=child.id,
+                            file_path=proof.file_path,
+                            file_type=proof.file_type,
+                            is_proof=True
+                        )
+                        db.add(new_proof)
     
     db.commit()
     db.refresh(ticket)
@@ -484,35 +522,37 @@ def update_ticket_status_explicit(
             "old_status": old_status,
             "new_status": ticket.status,
             "remarks": ticket.remarks,
-            "report": ticket.report
+            "report": ticket.report,
+            "cascaded_to_child_count": len(child_tickets)
         }
     )
     
-    # Send email notifications based on status transition
-    citizen = db.query(User).filter(User.id == ticket.citizen_id).first()
-    if citizen and background_tasks:
-        if status == "in_progress" and old_status != "in_progress":
-            background_tasks.add_task(
-                send_mock_email,
-                citizen.email,
-                f"Your Grievance is Under Active Review - #{ticket.id}",
-                f"Hello {citizen.name},\n\nYour grievance titled '{ticket.title}' (ID: #{ticket.id}) status has been updated to In Progress.\n\nRemarks: {remarks or 'No remarks provided.'}\n\nThank you,\nE-Governance Helpdesk Team"
-            )
-        elif status == "resolved" and old_status != "resolved":
-            # Fetch resolution proofs
-            proof_attachments = db.query(TicketAttachment).filter(
-                TicketAttachment.ticket_id == ticket.id,
-                TicketAttachment.is_proof == True
-            ).all()
-            proof_links = "\n".join([f"- http://localhost:8000{att.file_path}" for att in proof_attachments])
-            
-            background_tasks.add_task(
-                send_mock_email,
-                citizen.email,
-                f"Grievance Resolved - #{ticket.id}",
-                f"Hello {citizen.name},\n\nYour grievance titled '{ticket.title}' (ID: #{ticket.id}) has been successfully resolved.\n\nResolution Remarks:\n{remarks or 'No remarks provided.'}\n\nResolution Proof Links:\n{proof_links or 'No links available.'}\n\nThank you,\nE-Governance Helpdesk Team"
-            )
-            
+    # Send email notifications based on status transition (for Master and children)
+    all_notified_tickets = [ticket] + child_tickets
+    for t in all_notified_tickets:
+        t_citizen = db.query(User).filter(User.id == t.citizen_id).first()
+        if t_citizen and background_tasks:
+            if status == "in_progress" and old_status != "in_progress":
+                background_tasks.add_task(
+                    send_mock_email,
+                    t_citizen.email,
+                    f"Your Grievance is Under Active Review - #{t.id}",
+                    f"Hello {t_citizen.name},\n\nYour grievance titled '{t.title}' (ID: #{t.id}) status has been updated to In Progress.\n\nRemarks: {remarks or 'No remarks provided.'}\n\nThank you,\nE-Governance Helpdesk Team"
+                )
+            elif status == "resolved" and old_status != "resolved":
+                t_proofs = db.query(TicketAttachment).filter(
+                    TicketAttachment.ticket_id == t.id,
+                    TicketAttachment.is_proof == True
+                ).all()
+                t_links = "\n".join([f"- http://localhost:8000{att.file_path}" for att in t_proofs])
+                
+                background_tasks.add_task(
+                    send_mock_email,
+                    t_citizen.email,
+                    f"Grievance Resolved - #{t.id}",
+                    f"Hello {t_citizen.name},\n\nYour grievance titled '{t.title}' (ID: #{t.id}) has been successfully resolved.\n\nResolution Remarks:\n{remarks or 'No remarks provided.'}\n\nResolution Proof Links:\n{t_links or 'No links available.'}\n\nThank you,\nE-Governance Helpdesk Team"
+                )
+                
     return attach_telemetry_fields(ticket, db)
 
 @router.post("/{ticket_id}/feedback", response_model=TicketResponse)
@@ -550,6 +590,21 @@ def submit_ticket_feedback(
             )
             db.add(notification)
     else:
+        # Unlink the ticket from the Master Ticket if it was consolidated
+        old_parent_id = ticket.parent_ticket_id
+        if old_parent_id is not None:
+            ticket.parent_ticket_id = None
+            log_audit_event(
+                db=db,
+                user_id=current_user.id,
+                action="TICKET_UNLINKED_FROM_MASTER",
+                payload_dict={
+                    "ticket_id": ticket.id,
+                    "previous_parent_id": old_parent_id,
+                    "reason": "Citizen unsatisfied with master case resolution"
+                }
+            )
+            
         ticket.status = "Under Re-evaluation"
         ticket.reopened = True
         
@@ -1205,5 +1260,36 @@ def delete_ticket(
     db.delete(ticket)
     db.commit()
     return {"detail": "Ticket deleted successfully"}
+
+
+@router.get("/operator/route", response_model=List[TicketResponse])
+def get_operator_route(
+    lat: float,
+    lng: float,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Calculate and return an optimized route for the logged-in field operator's assigned tickets.
+    """
+    if current_user.role not in ["super_admin", "dept_admin"] and getattr(current_user, "dept_role", None) != "Field Operator":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only field operators or administrators can access route optimization features."
+        )
+        
+    # Get all active tickets assigned to this employee
+    tickets = db.query(Ticket).filter(
+        Ticket.assigned_employee_id == current_user.id,
+        Ticket.status != "resolved"
+    ).all()
+    
+    from app.utils.routing import solve_tsp
+    ordered_tickets = solve_tsp(lat, lng, tickets)
+    
+    # Attach telemetry fields and return
+    from app.api.tickets import attach_telemetry_fields
+    return [attach_telemetry_fields(t, db) for t in ordered_tickets]
+
 
 

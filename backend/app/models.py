@@ -78,6 +78,9 @@ class Ticket(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     
+    # Parent-Child clustering hierarchy
+    parent_ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="SET NULL"), nullable=True)
+    
     # Timestamps
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
@@ -94,6 +97,11 @@ class Ticket(Base):
     assigned_department = relationship("Department", back_populates="tickets", foreign_keys=[assigned_department_id])
     attachments = relationship("TicketAttachment", back_populates="ticket", cascade="all, delete-orphan")
     clarifications = relationship("TicketClarification", back_populates="ticket", cascade="all, delete-orphan")
+    parent_ticket = relationship("Ticket", remote_side=[id], backref="child_tickets")
+
+    @property
+    def child_ticket_ids(self):
+        return [t.id for t in self.child_tickets] if self.child_tickets else []
 
     def __repr__(self):
         return f"<Ticket(id={self.id}, title='{self.title[:20]}...', status='{self.status}')>"

@@ -54,14 +54,21 @@ const Sidebar = ({ user, logout }) => {
                 key={item.name}
                 to={item.path}
                 end={item.exact}
-                className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all border ${
+                className={({ isActive }) => `relative flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all duration-300 border overflow-hidden select-none hover:scale-[1.02] active:scale-[0.98] ${
                   isActive 
-                    ? 'bg-slate-800/80 border-slate-750 text-white shadow-md shadow-blue-500/5' 
-                    : 'bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 hover:border-slate-800'
+                    ? 'bg-slate-800/90 border-slate-750/80 text-white shadow-md shadow-blue-500/5' 
+                    : 'bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-850/60 hover:border-slate-800'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${item.color || 'text-slate-400'}`} />
-                <span>{item.name}</span>
+                {({ isActive }) => (
+                  <>
+                    {isActive && (
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-gradient-to-b from-blue-500 to-emerald-400 rounded-r-lg shadow-[0_0_8px_rgba(59,130,246,0.8)] animate-pulse" />
+                    )}
+                    <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-blue-400' : (item.color || 'text-slate-400')}`} />
+                    <span>{item.name}</span>
+                  </>
+                )}
               </NavLink>
             );
           })}

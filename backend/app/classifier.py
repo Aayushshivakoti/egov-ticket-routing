@@ -138,7 +138,15 @@ def get_reasoning_keywords(title: str, description: str, predicted_dept: Optiona
                 tfidf_feat = ml_vectorizer.transform([cleaned])
                 if predicted_dept in ml_model.classes_:
                     class_index = list(ml_model.classes_).index(predicted_dept)
-                    coef = ml_model.coef_[class_index]
+                    import numpy as np
+                    if hasattr(ml_model, "calibrated_classifiers_"):
+                        coefs = []
+                        for cal_clf in ml_model.calibrated_classifiers_:
+                            base_est = cal_clf.estimator
+                            coefs.append(base_est.coef_[class_index])
+                        coef = np.mean(coefs, axis=0)
+                    else:
+                        coef = ml_model.coef_[class_index]
                     feature_names = ml_vectorizer.get_feature_names_out()
                     
                     # Compute feature contributions (element-wise multiplication)

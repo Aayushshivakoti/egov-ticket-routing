@@ -21,9 +21,6 @@ SQLALCHEMY_DATABASE_URL = "sqlite:///./test_db.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-import app.tasks as tasks_module
-tasks_module.SessionLocal = TestingSessionLocal
-
 # Override standard DB dependency to run on SQLite
 def override_get_db():
     db = TestingSessionLocal()
@@ -36,6 +33,11 @@ def override_get_db():
 def setup_database():
     # Set override
     app.dependency_overrides[get_db] = override_get_db
+
+    # Patch SessionLocal in tasks
+    import app.tasks as tasks_module
+    original_session_local = tasks_module.SessionLocal
+    tasks_module.SessionLocal = TestingSessionLocal
 
     # Setup tables
     Base.metadata.create_all(bind=engine)
@@ -73,6 +75,10 @@ def setup_database():
     db.close()
     
     yield
+    
+    # Restore SessionLocal in tasks
+    import app.tasks as tasks_module
+    tasks_module.SessionLocal = original_session_local
     
     # Clean override
     app.dependency_overrides.pop(get_db, None)
