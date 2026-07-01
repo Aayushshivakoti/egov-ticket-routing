@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, NavLink } from 'react-router-dom';
+import { useParams, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import CitizenDashboard from '../components/CitizenDashboard';
@@ -13,6 +13,7 @@ import { LogOut, Cpu, User, Loader, Bell, X } from 'lucide-react';
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const { status } = useParams();
+  const location = useLocation();
   const [tickets, setTickets] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -173,8 +174,8 @@ const Dashboard = () => {
     return '';
   };
 
-  const isChatView = window.location.pathname.endsWith('/chats');
-  const isDeptsView = window.location.pathname.endsWith('/departments');
+  const isChatView = location.pathname.endsWith('/chats');
+  const isDeptsView = location.pathname.endsWith('/departments');
 
   const renderDashboardByRole = () => {
     if (user.role === 'super_admin') {
